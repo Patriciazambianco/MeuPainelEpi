@@ -5,8 +5,10 @@ import plotly.express as px
 @st.cache_data
 def carregar_dados():
     df = pd.read_excel("LISTA DE VERIFICAÇÃO EPI.xlsx", engine="openpyxl")
-    df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'])
-    return df
+   df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
+if df['Data_Inspecao'].isna().any():
+    print("Tem datas inválidas!")
+    print(df.loc[df['Data_Inspecao'].isna(), 'DATA_INSPECAO'].unique())
 
 def show():
     st.title("📊 Dashboard de Inspeções por Gerência")
