@@ -35,7 +35,7 @@ def show():
 
     st.subheader("Indicadores Gerais")
     total = df_filtrado.shape[0]
-    pendentes = (df_filtrado['Status'] == 'Pendente').sum()
+    pendentes = (df_filtrado['SITUAÇÃO CHECK LIST'] == 'Pendente').sum()
     pct_ok = (df_filtrado['Status'] == 'OK').mean() * 100 if total > 0 else 0
 
     col1, col2, col3 = st.columns(3)
