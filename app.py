@@ -26,12 +26,12 @@ def show():
 
     gerente_sel = st.sidebar.selectbox("Gerente", gerentes_foco)
 
-    df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
+    df_gerente = df[df['GERENTE'] == gerente_sel]
 
-    coords = df_gerente['COORDENADOR_IMEDIATO'].dropna().unique()
+    coords = df_gerente['COORDENADOR'].dropna().unique()
     coord_sel = st.sidebar.multiselect("Coordenador", options=coords, default=coords)
 
-    df_filtrado = df_gerente[df_gerente['COORDENADOR_IMEDIATO'].isin(coord_sel)]
+    df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
     st.subheader("Indicadores Gerais")
     total = df_filtrado.shape[0]
