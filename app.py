@@ -42,31 +42,59 @@ def exportar_excel(df):
         df.to_excel(writer, index=False, sheet_name='Pendentes')
     return buffer.getvalue()
 
+def cards_coloridos(total, pendentes, pct_ok, qtd_tecnicos_gerente, tecnicos_com_inspecao, tecnicos_sem_inspecao):
+    card_style = """
+        <div style="
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 15px; 
+            border-radius: 10px; 
+            text-align: center; 
+            font-weight: bold;
+            font-size: 28px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            margin: 5px;">
+            {label}<br><span style='font-size:36px'>{value}</span>
+        </div>
+    """
+    card_style_red = card_style.replace("#4CAF50", "#E74C3C")  # vermelho pendentes
+    card_style_blue = card_style.replace("#4CAF50", "#3498DB") # azul técnicos com inspeção
+    card_style_grey = card_style.replace("#4CAF50", "#7F8C8D") # cinza técnicos sem inspeção
+
+    cols = st.columns(6)
+
+    cols[0].markdown(card_style.format(label="Total Inspeções", value=total), unsafe_allow_html=True)
+    cols[1].markdown(card_style_red.format(label="Pendentes", value=pendentes), unsafe_allow_html=True)
+    cols[2].markdown(card_style.format(label="% OK", value=f"{pct_ok:.1f}%"), unsafe_allow_html=True)
+    cols[3].markdown(card_style.format(label="Técnicos Gerente", value=qtd_tecnicos_gerente), unsafe_allow_html=True)
+    cols[4].markdown(card_style_blue.format(label="Técnicos com Inspeção", value=tecnicos_com_inspecao), unsafe_allow_html=True)
+    cols[5].markdown(card_style_grey.format(label="Técnicos sem Inspeção", value=tecnicos_sem_inspecao), unsafe_allow_html=True)
+
 def show():
     st.title("📊 Dashboard de Inspeções EPI")
 
     df = carregar_dados()
 
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
-    gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", options=["Todos"] + gerentes)
+    gerentes.insert(0, "Todos")
+    gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", gerentes)
 
     if gerente_sel == "Todos":
         df_gerente = df.copy()
     else:
         df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
-    tecnicos = sorted(df_gerente['TECNICO'].dropna().unique())
-    tecnico_sel = st.sidebar.multiselect("👷‍♂️ Técnico", options=tecnicos, default=tecnicos)
+    coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
+    coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
-    df_filtrado = df_gerente[df_gerente['TECNICO'].isin(tecnico_sel)]
-
-    # Filtro vencidos > 180 dias
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
+
+    df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
+
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido'] == True]
 
     # Indicadores
-    st.subheader("📌 Indicadores Gerais")
     total = df_filtrado.shape[0]
     pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
     pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
@@ -75,78 +103,19 @@ def show():
     tecnicos_com_inspecao = df_filtrado.dropna(subset=['Data_Inspecao'])['TECNICO'].nunique()
     tecnicos_sem_inspecao = qtd_tecnicos_gerente - tecnicos_com_inspecao
 
-    col1, col2, col3, col4, col5, col6 = st.columns([1,1,1,1,1,1])
-    col1.metric("Total Inspeções", total)
-    col2.metric("Pendentes", pendentes)
-    col3.metric("% OK", f"{pct_ok:.1f}%")
-    col4.metric("Técnicos Gerente", qtd_tecnicos_gerente)
-    col5.metric("Técnicos com Inspeção", tecnicos_com_inspecao)
-    col6.metric("Técnicos sem Inspeção", tecnicos_sem_inspecao)
+    cards_coloridos(total, pendentes, pct_ok, qtd_tecnicos_gerente, tecnicos_com_inspecao, tecnicos_sem_inspecao)
 
-    # Dados detalhados antes dos gráficos
-    st.subheader("📋 Dados Detalhados")
+    st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=300)
 
-    # Gráfico % Checklists OK e Pendentes por dia e gerente
-    st.subheader("📅 % Checklists OK e Pendentes por Dia e Gerente")
-    df_datas = df_filtrado.dropna(subset=['Data_Inspecao']).copy()
-    if not df_datas.empty:
-        df_agg = (
-            df_datas.groupby(['Data_Inspecao', 'GERENTE_IMEDIATO'])
-            .agg(total_inspecoes=('Status_Final', 'count'),
-                 ok_inspecoes=('Status_Final', lambda x: (x == 'OK').sum()),
-                 pendente_inspecoes=('Status_Final', lambda x: (x == 'PENDENTE').sum()))
-            .reset_index()
-        )
-        df_agg['pct_ok'] = (df_agg['ok_inspecoes'] / df_agg['total_inspecoes']) * 100
-        df_agg['pct_pendente'] = (df_agg['pendente_inspecoes'] / df_agg['total_inspecoes']) * 100
-
-        fig = px.line(
-            df_agg.melt(id_vars=['Data_Inspecao', 'GERENTE_IMEDIATO'], 
-                        value_vars=['pct_ok', 'pct_pendente'],
-                        var_name='Status', value_name='Percentual'),
-            x='Data_Inspecao',
-            y='Percentual',
-            color='Status',
-            line_dash='GERENTE_IMEDIATO',
-            markers=True,
-            labels={
-                'Data_Inspecao': 'Data da Inspeção',
-                'Percentual': '% Checklists',
-                'Status': 'Status',
-                'GERENTE_IMEDIATO': 'Gerente'
-            },
-            title='% Checklists OK e Pendentes por Dia e Gerente'
-        )
-        # Ajustar nomes da legenda
-        fig.for_each_trace(lambda t: t.update(name=t.name.replace('pct_ok','OK').replace('pct_pendente','Pendente')))
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Nenhum dado de inspeção disponível para o filtro selecionado.")
-
-    # Pizza por Gerente
-    st.subheader("🥧 Status por Gerente")
-    df_gerente_pie = df.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack().fillna(0)
-    for gerente in df_gerente_pie.index:
+    st.subheader("📈 % Check List OK e Pendentes por Gerente")
+    df_pie = df_filtrado.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack().fillna(0)
+    for gerente in df_pie.index:
         st.markdown(f"**👨‍💼 {gerente}**")
         fig = px.pie(
-            names=df_gerente_pie.columns,
-            values=df_gerente_pie.loc[gerente],
+            names=df_pie.columns,
+            values=df_pie.loc[gerente],
             title=f"Status - {gerente}",
-            hole=0.4,
-            color_discrete_map={"OK": "green", "PENDENTE": "red"}
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Pizza por Coordenador
-    st.subheader("🥧 Status por Coordenador")
-    df_coord_pie = df.groupby('COORDENADOR')['Status_Final'].value_counts().unstack().fillna(0)
-    for coord in df_coord_pie.index:
-        st.markdown(f"**👩‍💼 {coord}**")
-        fig = px.pie(
-            names=df_coord_pie.columns,
-            values=df_coord_pie.loc[coord],
-            title=f"Status - {coord}",
             hole=0.4,
             color_discrete_map={"OK": "green", "PENDENTE": "red"}
         )
@@ -163,3 +132,4 @@ def show():
 
 if __name__ == "__main__":
     show()
+
