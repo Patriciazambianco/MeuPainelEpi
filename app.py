@@ -30,7 +30,7 @@ def carregar_dados():
     return final
 
 def show():
-    st.title("🦺 Dashboard de Inspeções de EPI")
+    st.title("🦺 Dashboard de EPI")
 
     df = carregar_dados()
 
