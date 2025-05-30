@@ -93,14 +93,14 @@ def show():
     def color_metric(label, value, color):
         st.markdown(f"""
         <div style='
-            padding:15px; 
+            padding:12px; 
             border-radius:10px; 
             background-color:{color}; 
             color:white; 
             text-align:center;
             font-family:sans-serif;
             '>
-            <h5 style='margin-bottom:5px'>{label}</h5>
+            <h5 style='margin-bottom:4px'>{label}</h5>
             <h2 style='margin-top:0'>{value}</h2>
         </div>
         """, unsafe_allow_html=True)
@@ -120,8 +120,27 @@ def show():
 
     st.markdown("---")
 
-    # --- SEUS GRÁFICOS E TABELAS AQUI ---
-    # Por exemplo:
+    # --- GRÁFICO DE PIZZA ---
+    st.subheader("🍕 Status das Inspeções (OK x Pendentes)")
+    pizza_data = df_filtrado['Status_Final'].value_counts().reset_index()
+    pizza_data.columns = ['Status', 'Quantidade']
+
+    fig_pizza = px.pie(
+        pizza_data, 
+        values='Quantidade', 
+        names='Status', 
+        color='Status',
+        color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51', 'OUTRO':'#f4a261'},
+        hole=0.4
+    )
+    fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
+    fig_pizza.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'))
+
+    st.plotly_chart(fig_pizza, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- DADOS DETALHADOS ---
     st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
