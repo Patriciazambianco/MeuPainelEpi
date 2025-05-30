@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+st.set_page_config(page_title="Dashboard de EPI", layout="wide")
+
 @st.cache_data
 def carregar_dados():
     df = pd.read_excel("LISTA DE VERIFICAÇÃO EPI.xlsx", engine="openpyxl")
@@ -14,10 +16,8 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
 
-    # Pega todos os pares Técnico + Produto
     base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
 
-    # Agrupa para pegar a última inspeção válida
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
@@ -25,45 +25,45 @@ def carregar_dados():
         .last()
     )
 
-    # Junta com a base para manter até quem não tem inspeção
     final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
 
     return final
 
 def show():
-    st.title("📊 Dashboard de Inspeções")
+    st.title("🦺 Dashboard de Inspeções de EPI")
 
     df = carregar_dados()
 
-    gerentes_foco = df['GERENTE_IMEDIATO'].dropna().unique().tolist()
-    gerente_sel = st.sidebar.selectbox("Gerente", gerentes_foco)
+    col_filtro1, col_filtro2 = st.sidebar.columns(2)
+    gerentes_foco = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
+    gerente_sel = col_filtro1.selectbox("Gerente", gerentes_foco)
 
     df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
-    coords = df_gerente['COORDENADOR'].dropna().unique()
-    coord_sel = st.sidebar.multiselect("Coordenador", options=coords, default=coords)
+    coords = sorted(df_gerente['COORDENADOR'].dropna().unique())
+    coord_sel = col_filtro2.multiselect("Coordenador", options=coords, default=coords)
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
-    st.subheader("📌 Indicadores Gerais")
+    st.markdown("### 📊 Indicadores Gerais")
     total = df_filtrado.shape[0]
     pendentes = (df_filtrado['Status'] == 'Pendente').sum()
-    pct_ok = (df_filtrado['Status'] == 'OK').mean() * 100 if total > 0 else 0
+    ok = (df_filtrado['Status'] == 'OK').sum()
+    pct_ok = (ok / total) * 100 if total > 0 else 0
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Inspeções", total)
-    col2.metric("Pendentes", pendentes)
-    col3.metric("% OK", f"{pct_ok:.1f}%")
+    kpi1, kpi2, kpi3 = st.columns(3)
+    kpi1.metric("Total Inspeções", total)
+    kpi2.metric("Pendentes", pendentes)
+    kpi3.metric("% OK", f"{pct_ok:.1f}%")
 
-    st.subheader("📦 Inspeções por Produto")
-    fig = px.histogram(df_filtrado, x="PRODUTO_SIMILAR", color="Status", barmode="group")
-    st.plotly_chart(fig, use_container_width=True)
+    st.markdown("### 📊 Inspeções por Produto")
+    fig_produto = px.histogram(df_filtrado, x="PRODUTO_SIMILAR", color="Status", barmode="group")
+    st.plotly_chart(fig_produto, use_container_width=True)
 
-    st.subheader("🥧 Status por Gerente")
+    st.markdown("### 🌐 Status por Gerente")
     df_gerente_pie = df.groupby('GERENTE_IMEDIATO')['Status'].value_counts().unstack().fillna(0)
-
     for gerente in df_gerente_pie.index:
-        st.markdown(f"**👨‍💼 {gerente}**")
+        st.markdown(f"**{gerente}**")
         fig = px.pie(
             names=df_gerente_pie.columns,
             values=df_gerente_pie.loc[gerente],
@@ -73,11 +73,10 @@ def show():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("🥧 Status por Coordenador")
+    st.markdown("### 🛋️ Status por Coordenador")
     df_coord_pie = df.groupby('COORDENADOR')['Status'].value_counts().unstack().fillna(0)
-
     for coord in df_coord_pie.index:
-        st.markdown(f"**👩‍💼 {coord}**")
+        st.markdown(f"**{coord}**")
         fig = px.pie(
             names=df_coord_pie.columns,
             values=df_coord_pie.loc[coord],
@@ -87,7 +86,7 @@ def show():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("📋 Dados detalhados")
+    st.markdown("### 📄 Dados Detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
 if __name__ == "__main__":
