@@ -48,22 +48,41 @@ def exportar_excel(df):
     return buffer.getvalue()
 
 def show():
-    st.title("📊 Inspeções EPI")
+    st.title("📊 Dashboard de Inspeções EPI")
 
     df = carregar_dados()
 
+    # Filtro por gerente com opção "Todos"
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
+    gerentes.insert(0, "Todos")
     gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", gerentes)
 
-    df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
+    if gerente_sel == "Todos":
+        df_gerente = df.copy()
+    else:
+        df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
+    # Filtro por coordenador
     coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
     coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
-    # Filtro dos 180 dias
+    # Filtro por produto
+    produtos = sorted(df_gerente['PRODUTO_SIMILAR'].dropna().unique())
+    produto_sel = st.sidebar.multiselect("📦 Produto", options=produtos, default=produtos)
+
+    # Filtro por técnico
+    tecnicos = sorted(df_gerente['TECNICO'].dropna().unique())
+    tecnico_sel = st.sidebar.multiselect("👷 Técnico", options=tecnicos, default=tecnicos)
+
+    # Filtro vencidos
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
 
-    df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
+    # Aplicando todos os filtros
+    df_filtrado = df_gerente[
+        df_gerente['COORDENADOR'].isin(coord_sel) &
+        df_gerente['PRODUTO_SIMILAR'].isin(produto_sel) &
+        df_gerente['TECNICO'].isin(tecnico_sel)
+    ]
 
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido'] == True]
@@ -79,7 +98,7 @@ def show():
     col2.metric("Pendentes", pendentes)
     col3.metric("% OK", f"{pct_ok:.1f}%")
 
-    # Tabela de dados detalhados logo após os indicadores
+    # Dados detalhados + download
     st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
