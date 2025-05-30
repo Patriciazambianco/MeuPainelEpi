@@ -17,8 +17,10 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
 
+    # Base com todos os pares TECNICO + PRODUTO
     base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
 
+    # Última inspeção válida
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
@@ -26,10 +28,13 @@ def carregar_dados():
         .last()
     )
 
+    # Junta com a base para manter os sem inspeção
     final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
 
+    # Padroniza status
     final['Status_Final'] = final['Status_Final'].str.upper()
 
+    # Cria coluna de pendência vencida
     hoje = pd.Timestamp.now().normalize()
     final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
     final['Vencido'] = final['Dias_Sem_Inspecao'] > 180
@@ -47,37 +52,25 @@ def show():
 
     df = carregar_dados()
 
+    # --- FILTROS ---
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
     gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", ["Todos"] + gerentes)
 
     if gerente_sel != "Todos":
-        df = df[df['GERENTE_IMEDIATO'] == gerente_sel]
+        df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
+    else:
+        df_gerente = df.copy()
 
-    coordenadores = sorted(df['COORDENADOR'].dropna().unique())
+    coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
     coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
+    df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
+
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
-
-    df_filtrado = df[df['COORDENADOR'].isin(coord_sel)]
-
     if so_vencidos:
-        df_filtrado = df_filtrado[df_filtrado['Vencido'] == True]
+        df_filtrado = df_filtrado[df_filtrado['Vencido']]
 
-    # Indicadores
-    st.subheader("📌 Indicadores Gerais")
-    total = df_filtrado.shape[0]
-    pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
-    pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Inspeções", total)
-    col2.metric("Pendentes", pendentes)
-    col3.metric("% OK", f"{pct_ok:.1f}%")
-
-    st.subheader("📋 Dados detalhados")
-    st.dataframe(df_filtrado.reset_index(drop=True), height=400)
-
-    # Download pendentes no topo
+    # --- DOWNLOAD BUTTON NO TOPO ---
     df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']
     st.download_button(
         label="📥 Baixar Pendentes (.xlsx)",
@@ -86,50 +79,51 @@ def show():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Gráficos de pizza coloridos
-    st.subheader("🥧 % Check List OK e Pendentes por Gerente e Coordenador")
+    # --- CARDS COLORIDOS ---
+    total = df_filtrado.shape[0]
+    pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
+    pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
 
-    color_map = {
-        "OK": "#28a745",        # verde vibrante
-        "PENDENTE": "#dc3545",  # vermelho forte
-        "VENCIDO": "#fd7e14",   # laranja chamativo
-    }
+    num_tecnicos = df_filtrado['TECNICO'].nunique()
+    tecnicos_inspecionaram = df_filtrado[df_filtrado['Data_Inspecao'].notnull()]['TECNICO'].nunique()
+    tecnicos_nao_inspecionaram = num_tecnicos - tecnicos_inspecionaram
 
-    # Gráfico por Gerente
-    df_ger = df_filtrado.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack().fillna(0)
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4, col5, col6 = st.columns([1,1,1,1,1,1])
+
+    def color_metric(label, value, color):
+        st.markdown(f"""
+        <div style='
+            padding:15px; 
+            border-radius:10px; 
+            background-color:{color}; 
+            color:white; 
+            text-align:center;
+            font-family:sans-serif;
+            '>
+            <h5 style='margin-bottom:5px'>{label}</h5>
+            <h2 style='margin-top:0'>{value}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
     with col1:
-        st.markdown("**👨‍💼 Gerentes**")
-        for gerente in df_ger.index:
-            st.markdown(f"**{gerente}**")
-            fig = px.pie(
-                names=df_ger.columns,
-                values=df_ger.loc[gerente],
-                title=f"Status - {gerente}",
-                hole=0.4,
-                color_discrete_map=color_map
-            )
-            fig.update_traces(textinfo='percent+label', textfont_size=14,
-                              marker=dict(line=dict(color='#000000', width=1.5)))
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Gráfico por Coordenador
-    df_coord = df_filtrado.groupby('COORDENADOR')['Status_Final'].value_counts().unstack().fillna(0)
+        color_metric("Total Inspeções", total, "#2a9d8f")
     with col2:
-        st.markdown("**👩‍💼 Coordenadores**")
-        for coord in df_coord.index:
-            st.markdown(f"**{coord}**")
-            fig = px.pie(
-                names=df_coord.columns,
-                values=df_coord.loc[coord],
-                title=f"Status - {coord}",
-                hole=0.4,
-                color_discrete_map=color_map
-            )
-            fig.update_traces(textinfo='percent+label', textfont_size=14,
-                              marker=dict(line=dict(color='#000000', width=1.5)))
-            st.plotly_chart(fig, use_container_width=True)
+        color_metric("Pendentes", pendentes, "#e76f51")
+    with col3:
+        color_metric("% OK", f"{pct_ok:.1f}%", "#264653")
+    with col4:
+        color_metric("Técnicos", num_tecnicos, "#f4a261")
+    with col5:
+        color_metric("Téc. que Inspecionaram", tecnicos_inspecionaram, "#2a9d8f")
+    with col6:
+        color_metric("Téc. não Inspecionaram", tecnicos_nao_inspecionaram, "#e76f51")
+
+    st.markdown("---")
+
+    # --- SEUS GRÁFICOS E TABELAS AQUI ---
+    # Por exemplo:
+    st.subheader("📋 Dados detalhados")
+    st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
 if __name__ == "__main__":
     show()
