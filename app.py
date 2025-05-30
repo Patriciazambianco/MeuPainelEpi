@@ -31,7 +31,7 @@ def carregar_dados():
     return final
 
 def show():
-    st.title("📊 Dashboard de Inspeções por Gerência")
+    st.title("📊 Dashboard de Inspeções")
 
     df = carregar_dados()
 
