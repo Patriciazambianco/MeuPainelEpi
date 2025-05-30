@@ -42,6 +42,26 @@ def exportar_excel(df):
         df.to_excel(writer, index=False, sheet_name='Pendentes')
     return buffer.getvalue()
 
+def plot_pie_chart(df, group_col, title_prefix):
+    grouped = df.groupby(group_col)['Status_Final'].value_counts().unstack(fill_value=0)
+    grouped = grouped[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(grouped.columns) else grouped
+
+    charts = []
+    for grupo in grouped.index:
+        valores = grouped.loc[grupo]
+        fig = px.pie(
+            names=valores.index,
+            values=valores.values,
+            color=valores.index,
+            color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51'},
+            hole=0.4,
+            title=f"{title_prefix}: {grupo}"
+        )
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+        fig.update_layout(margin=dict(t=30,b=0,l=0,r=0), height=250, showlegend=False)
+        charts.append(fig)
+    return charts
+
 def show():
     st.title("📊 Dashboard de Inspeções EPI")
 
@@ -72,6 +92,7 @@ def show():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+    # Indicadores gerais
     total = df_filtrado.shape[0]
     pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
     pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
@@ -113,49 +134,27 @@ def show():
 
     st.markdown("---")
 
-    st.subheader("🍕 Status das Inspeções por Gerente e Coordenador (geral)")
+    st.subheader("🍕 Status das Inspeções por Gerente")
 
-    col_g, col_c = st.columns(2)
+    graficos_gerente = plot_pie_chart(df_filtrado, 'GERENTE_IMEDIATO', "Gerente")
 
-    # Total geral por Status para Gerente
-    pizza_gerente = df.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack(fill_value=0).sum(axis=0)
-    pizza_gerente = pizza_gerente[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(pizza_gerente.index) else pizza_gerente
+    # Mostrando os gráficos dos gerentes em 3 colunas
+    for i in range(0, len(graficos_gerente), 3):
+        cols = st.columns(3)
+        for j, fig in enumerate(graficos_gerente[i:i+3]):
+            cols[j].plotly_chart(fig, use_container_width=True)
 
-    # Total geral por Status para Coordenador
-    pizza_coord = df.groupby('COORDENADOR')['Status_Final'].value_counts().unstack(fill_value=0).sum(axis=0)
-    pizza_coord = pizza_coord[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(pizza_coord.index) else pizza_coord
+    st.markdown("---")
 
-    with col_g:
-        st.markdown("**Gerente (Geral)**")
-        if not pizza_gerente.empty:
-            fig_g = px.pie(
-                names=pizza_gerente.index,
-                values=pizza_gerente.values,
-                color=pizza_gerente.index,
-                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51'},
-                hole=0.4
-            )
-            fig_g.update_traces(textposition='inside', textinfo='percent+label')
-            fig_g.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'), height=300)
-            st.plotly_chart(fig_g, use_container_width=True)
-        else:
-            st.write("Sem dados para Gerente.")
+    st.subheader("🍕 Status das Inspeções por Coordenador")
 
-    with col_c:
-        st.markdown("**Coordenador (Geral)**")
-        if not pizza_coord.empty:
-            fig_c = px.pie(
-                names=pizza_coord.index,
-                values=pizza_coord.values,
-                color=pizza_coord.index,
-                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51'},
-                hole=0.4
-            )
-            fig_c.update_traces(textposition='inside', textinfo='percent+label')
-            fig_c.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'), height=300)
-            st.plotly_chart(fig_c, use_container_width=True)
-        else:
-            st.write("Sem dados para Coordenador.")
+    graficos_coord = plot_pie_chart(df_filtrado, 'COORDENADOR', "Coordenador")
+
+    # Mostrando os gráficos dos coordenadores em 3 colunas
+    for i in range(0, len(graficos_coord), 3):
+        cols = st.columns(3)
+        for j, fig in enumerate(graficos_coord[i:i+3]):
+            cols[j].plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
 
