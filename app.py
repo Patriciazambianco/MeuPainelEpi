@@ -65,9 +65,6 @@ def show():
     coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
     coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
-    produtos = sorted(df_gerente['PRODUTO_SIMILAR'].dropna().unique())
-    produto_sel = st.sidebar.multiselect("📦 Produto", options=produtos, default=produtos)
-
     tecnicos = sorted(df_gerente['TECNICO'].dropna().unique())
     tecnico_sel = st.sidebar.multiselect("👷 Técnico", options=tecnicos, default=tecnicos)
 
@@ -75,7 +72,6 @@ def show():
 
     df_filtrado = df_gerente[
         df_gerente['COORDENADOR'].isin(coord_sel) &
-        df_gerente['PRODUTO_SIMILAR'].isin(produto_sel) &
         df_gerente['TECNICO'].isin(tecnico_sel)
     ]
 
@@ -118,10 +114,14 @@ def show():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    st.subheader("📦 Inspeções por Produto")
+    st.subheader("📦 Inspeções por Técnico")
     if not df_filtrado.empty:
-        fig = px.histogram(df_filtrado, x="PRODUTO_SIMILAR", color="Status_Final", barmode="group",
-                           color_discrete_map={"OK": "green", "PENDENTE": "red"})
+        fig = px.bar(
+            df_filtrado.groupby(['TECNICO', 'Status_Final']).size().reset_index(name='Qtd'),
+            x='TECNICO', y='Qtd', color='Status_Final', barmode='group',
+            color_discrete_map={"OK": "green", "PENDENTE": "red"},
+            title="Inspeções por Técnico"
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Nenhum dado disponível para os filtros selecionados.")
@@ -154,4 +154,3 @@ def show():
 
 if __name__ == "__main__":
     show()
-
