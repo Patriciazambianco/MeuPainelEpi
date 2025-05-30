@@ -42,9 +42,9 @@ def exportar_excel(df):
 
 def card(title, value, color):
     return f"""
-    <div style="background-color:{color}; padding:20px; border-radius:12px; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); text-align:center">
-        <h4 style="margin:0; color:white;">{title}</h4>
-        <h2 style="margin:5px 0 0 0; color:white;">{value}</h2>
+    <div style="background-color:{color}; padding:12px; border-radius:10px; box-shadow: 2px 2px 6px rgba(0,0,0,0.1); text-align:center">
+        <h5 style="margin:0; color:white;">{title}</h5>
+        <h3 style="margin:5px 0 0 0; color:white;">{value}</h3>
     </div>
     """
 
@@ -154,3 +154,4 @@ def show():
 
 if __name__ == "__main__":
     show()
+
