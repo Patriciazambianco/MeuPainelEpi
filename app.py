@@ -17,10 +17,7 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
 
-    # Base com todos os pares TECNICO + PRODUTO
     base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
-
-    # Última inspeção válida
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
@@ -28,13 +25,9 @@ def carregar_dados():
         .last()
     )
 
-    # Junta com a base para manter os sem inspeção
     final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
-
-    # Padroniza status
     final['Status_Final'] = final['Status_Final'].str.upper()
 
-    # Cria coluna de pendência vencida
     hoje = pd.Timestamp.now().normalize()
     final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
     final['Vencido'] = final['Dias_Sem_Inspecao'] > 180
@@ -47,12 +40,19 @@ def exportar_excel(df):
         df.to_excel(writer, index=False, sheet_name='Pendentes')
     return buffer.getvalue()
 
+def card(title, value, color):
+    return f"""
+    <div style="background-color:{color}; padding:20px; border-radius:12px; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); text-align:center">
+        <h4 style="margin:0; color:white;">{title}</h4>
+        <h2 style="margin:5px 0 0 0; color:white;">{value}</h2>
+    </div>
+    """
+
 def show():
     st.title("📊 Dashboard de Inspeções EPI")
 
     df = carregar_dados()
 
-    # Filtro por gerente com opção "Todos"
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
     gerentes.insert(0, "Todos")
     gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", gerentes)
@@ -62,22 +62,17 @@ def show():
     else:
         df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
-    # Filtro por coordenador
     coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
     coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
-    # Filtro por produto
     produtos = sorted(df_gerente['PRODUTO_SIMILAR'].dropna().unique())
     produto_sel = st.sidebar.multiselect("📦 Produto", options=produtos, default=produtos)
 
-    # Filtro por técnico
     tecnicos = sorted(df_gerente['TECNICO'].dropna().unique())
     tecnico_sel = st.sidebar.multiselect("👷 Técnico", options=tecnicos, default=tecnicos)
 
-    # Filtro vencidos
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
 
-    # Aplicando todos os filtros
     df_filtrado = df_gerente[
         df_gerente['COORDENADOR'].isin(coord_sel) &
         df_gerente['PRODUTO_SIMILAR'].isin(produto_sel) &
@@ -87,18 +82,32 @@ def show():
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido'] == True]
 
-    # Indicadores
     st.subheader("📌 Indicadores Gerais")
+
     total = df_filtrado.shape[0]
     pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
     pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Inspeções", total)
-    col2.metric("Pendentes", pendentes)
-    col3.metric("% OK", f"{pct_ok:.1f}%")
+    tecnicos_gerente = df_gerente['TECNICO'].nunique()
+    tecnicos_com_inspecao = df_gerente.dropna(subset=['Data_Inspecao'])['TECNICO'].nunique()
+    tecnicos_sem_inspecao = tecnicos_gerente - tecnicos_com_inspecao
 
-    # Dados detalhados + download
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(card("📊 Total Inspeções", total, "#1f77b4"), unsafe_allow_html=True)
+    with col2:
+        st.markdown(card("❌ Pendentes", pendentes, "#d62728"), unsafe_allow_html=True)
+    with col3:
+        st.markdown(card("✅ % OK", f"{pct_ok:.1f}%", "#2ca02c"), unsafe_allow_html=True)
+
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        st.markdown(card("👷 Técnicos do gerente", tecnicos_gerente, "#9467bd"), unsafe_allow_html=True)
+    with col5:
+        st.markdown(card("📋 Com inspeção", tecnicos_com_inspecao, "#17becf"), unsafe_allow_html=True)
+    with col6:
+        st.markdown(card("🚫 Sem inspeção", tecnicos_sem_inspecao, "#ff7f0e"), unsafe_allow_html=True)
+
     st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
@@ -109,7 +118,6 @@ def show():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Gráfico de barras
     st.subheader("📦 Inspeções por Produto")
     if not df_filtrado.empty:
         fig = px.histogram(df_filtrado, x="PRODUTO_SIMILAR", color="Status_Final", barmode="group",
@@ -118,7 +126,6 @@ def show():
     else:
         st.info("Nenhum dado disponível para os filtros selecionados.")
 
-    # Pizza por Gerente
     st.subheader("🥧 Status por Gerente")
     df_gerente_pie = df.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack().fillna(0)
     for gerente in df_gerente_pie.index:
@@ -132,7 +139,6 @@ def show():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Pizza por Coordenador
     st.subheader("🥧 Status por Coordenador")
     df_coord_pie = df.groupby('COORDENADOR')['Status_Final'].value_counts().unstack().fillna(0)
     for coord in df_coord_pie.index:
