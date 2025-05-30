@@ -16,8 +16,11 @@ def carregar_dados():
     }, inplace=True)
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
+
+    # Base com todos os pares TECNICO + PRODUTO
     base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
 
+    # Última inspeção válida
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
@@ -25,9 +28,13 @@ def carregar_dados():
         .last()
     )
 
+    # Junta com a base para manter os sem inspeção
     final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
+
+    # Padroniza status
     final['Status_Final'] = final['Status_Final'].str.upper()
 
+    # Cria coluna de pendência vencida
     hoje = pd.Timestamp.now().normalize()
     final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
     final['Vencido'] = final['Dias_Sem_Inspecao'] > 180
@@ -41,40 +48,22 @@ def exportar_excel(df):
     return buffer.getvalue()
 
 def show():
-    st.title("📊 Dashboard de Inspeções EPI")
+    st.title("📊 Inspeções EPI")
+
     df = carregar_dados()
 
-    # Verifica reset de sessão
-    if 'reset' in st.session_state and st.session_state.reset:
-        st.session_state.clear()
-        st.experimental_rerun()
+    gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
+    gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", gerentes)
 
-    with st.sidebar:
-        st.header("🎛️ Filtros")
-        reset = st.button("🔄 Resetar Filtros")
-        if reset:
-            st.session_state['reset'] = True
-            st.experimental_rerun()
+    df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
-        gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
-        gerente_sel = st.selectbox("👨‍💼 Selecione o Gerente", options=["Todos"] + gerentes)
+    coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
+    coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
-        df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel] if gerente_sel != "Todos" else df.copy()
+    # Filtro dos 180 dias
+    so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
 
-        coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
-        coord_sel = st.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
-
-        data_min = df_gerente['Data_Inspecao'].min()
-        data_max = df_gerente['Data_Inspecao'].max()
-        data_inicio, data_fim = st.date_input("📅 Período da Inspeção", [data_min, data_max])
-
-        so_vencidos = st.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
-
-    df_filtrado = df_gerente[
-        (df_gerente['COORDENADOR'].isin(coord_sel)) &
-        (df_gerente['Data_Inspecao'] >= pd.to_datetime(data_inicio)) &
-        (df_gerente['Data_Inspecao'] <= pd.to_datetime(data_fim))
-    ]
+    df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido'] == True]
@@ -90,16 +79,22 @@ def show():
     col2.metric("Pendentes", pendentes)
     col3.metric("% OK", f"{pct_ok:.1f}%")
 
-    # Gráfico por produto
+    # Tabela de dados detalhados logo após os indicadores
+    st.subheader("📋 Dados detalhados")
+    st.dataframe(df_filtrado.reset_index(drop=True), height=400)
+
+    st.download_button(
+        label="📥 Baixar Pendentes (.xlsx)",
+        data=exportar_excel(df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']),
+        file_name="pendentes_epi.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    # Gráfico de barras
     st.subheader("📦 Inspeções por Produto")
     if not df_filtrado.empty:
-        fig = px.histogram(
-            df_filtrado,
-            x="PRODUTO_SIMILAR",
-            color="Status_Final",
-            barmode="group",
-            color_discrete_map={"OK": "green", "PENDENTE": "red"}
-        )
+        fig = px.histogram(df_filtrado, x="PRODUTO_SIMILAR", color="Status_Final", barmode="group",
+                           color_discrete_map={"OK": "green", "PENDENTE": "red"})
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Nenhum dado disponível para os filtros selecionados.")
@@ -131,17 +126,6 @@ def show():
             color_discrete_map={"OK": "green", "PENDENTE": "red"}
         )
         st.plotly_chart(fig, use_container_width=True)
-
-    # Exportação
-    st.download_button(
-        label="📥 Baixar Pendentes (.xlsx)",
-        data=exportar_excel(df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']),
-        file_name="pendentes_epi.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    st.subheader("📋 Dados detalhados")
-    st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
 if __name__ == "__main__":
     show()
