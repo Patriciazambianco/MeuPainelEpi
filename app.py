@@ -50,7 +50,7 @@ def show():
     df_vencidos = df[df['Status_180'] == 'Pendente']
 
     st.sidebar.header("🎯 Filtros")
-    gerentes = sorted(df_vencidos['GERENTE_IMEDIATO'].dropna().unique())
+    gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
     gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione um Gerente", [""] + gerentes)
 
     if gerente_sel:
