@@ -52,7 +52,6 @@ def show():
 
     df = carregar_dados()
 
-    # Filtro Gerente
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
     gerentes.insert(0, "Todos")
     gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", gerentes)
@@ -62,7 +61,6 @@ def show():
     else:
         df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
-    # Filtro Coordenador
     coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
     coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
@@ -82,7 +80,7 @@ def show():
     tecnicos_com_inspecao = df_filtrado.dropna(subset=['Data_Inspecao'])['TECNICO'].nunique()
     tecnicos_sem_inspecao = qtd_tecnicos_gerente - tecnicos_com_inspecao
 
-    # Botão Baixar pendentes no topo, em destaque
+    # Botão Baixar pendentes no topo
     st.download_button(
         label="📥 Baixar Pendentes (.xlsx)",
         data=exportar_excel(df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']),
@@ -91,11 +89,9 @@ def show():
         key="btn_download_top"
     )
 
-    # Layout dos cards
+    # Cards indicadores
     cols = st.columns([1,1,1,1,1,1])
-
     cores = ["#2E86C1", "#E74C3C", "#27AE60", "#34495E", "#1ABC9C", "#7F8C8D"]
-
     valores = [total, pendentes, f"{pct_ok:.1f}%", qtd_tecnicos_gerente, tecnicos_com_inspecao, tecnicos_sem_inspecao]
     labels = ["Total Inspeções", "Pendentes", "% OK", "Técnicos Gerente", "Técnicos com Inspeção", "Técnicos sem Inspeção"]
 
@@ -105,18 +101,37 @@ def show():
     st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=300)
 
-    st.subheader("📈 % Check List OK e Pendentes por Gerente")
-    df_pie = df_filtrado.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack().fillna(0)
-    for gerente in df_pie.index:
-        st.markdown(f"**👨‍💼 {gerente}**")
-        fig = px.pie(
-            names=df_pie.columns,
-            values=df_pie.loc[gerente],
-            title=f"Status - {gerente}",
-            hole=0.4,
-            color_discrete_map={"OK": "green", "PENDENTE": "red"}
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    st.subheader("📈 % Check List OK e Pendentes")
+
+    col1, col2 = st.columns(2)
+
+    # Gráfico por Gerente
+    df_ger = df_filtrado.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack().fillna(0)
+    with col1:
+        st.markdown("### 👨‍💼 Por Gerente")
+        for gerente in df_ger.index:
+            fig = px.pie(
+                names=df_ger.columns,
+                values=df_ger.loc[gerente],
+                title=f"Status - {gerente}",
+                hole=0.4,
+                color_discrete_map={"OK": "green", "PENDENTE": "red"}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    # Gráfico por Coordenador
+    df_coord = df_filtrado.groupby('COORDENADOR')['Status_Final'].value_counts().unstack().fillna(0)
+    with col2:
+        st.markdown("### 👩‍💼 Por Coordenador")
+        for coord in df_coord.index:
+            fig = px.pie(
+                names=df_coord.columns,
+                values=df_coord.loc[coord],
+                title=f"Status - {coord}",
+                hole=0.4,
+                color_discrete_map={"OK": "green", "PENDENTE": "red"}
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     show()
