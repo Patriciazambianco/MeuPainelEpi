@@ -17,10 +17,8 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
 
-    # Base com todos os pares TECNICO + PRODUTO
     base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
 
-    # Última inspeção válida
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
@@ -28,13 +26,10 @@ def carregar_dados():
         .last()
     )
 
-    # Junta com a base para manter os sem inspeção
     final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
 
-    # Padroniza status
     final['Status_Final'] = final['Status_Final'].str.upper()
 
-    # Cria coluna de pendência vencida
     hoje = pd.Timestamp.now().normalize()
     final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
     final['Vencido'] = final['Dias_Sem_Inspecao'] > 180
@@ -52,7 +47,6 @@ def show():
 
     df = carregar_dados()
 
-    # --- FILTROS ---
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
     gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", ["Todos"] + gerentes)
 
@@ -70,7 +64,6 @@ def show():
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido']]
 
-    # --- DOWNLOAD BUTTON NO TOPO ---
     df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']
     st.download_button(
         label="📥 Baixar Pendentes (.xlsx)",
@@ -79,7 +72,6 @@ def show():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # --- CARDS COLORIDOS ---
     total = df_filtrado.shape[0]
     pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
     pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
@@ -120,27 +112,53 @@ def show():
 
     st.markdown("---")
 
-    # --- GRÁFICO DE PIZZA ---
-    st.subheader("🍕 Status das Inspeções (OK x Pendentes)")
-    pizza_data = df_filtrado['Status_Final'].value_counts().reset_index()
-    pizza_data.columns = ['Status', 'Quantidade']
+    # Gráficos de pizza lado a lado
+    st.subheader("🍕 Status das Inspeções por Gerente e Coordenador")
 
-    fig_pizza = px.pie(
-        pizza_data, 
-        values='Quantidade', 
-        names='Status', 
-        color='Status',
-        color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51', 'OUTRO':'#f4a261'},
-        hole=0.4
-    )
-    fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
-    fig_pizza.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'))
+    col_g, col_c = st.columns(2)
 
-    st.plotly_chart(fig_pizza, use_container_width=True)
+    # Pizza por Gerente
+    pizza_gerente = df_filtrado.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack(fill_value=0)
+    pizza_gerente = pizza_gerente.reset_index()
+
+    with col_g:
+        st.markdown("**Gerente**")
+        if not pizza_gerente.empty:
+            fig_g = px.pie(
+                pizza_gerente,
+                names=pizza_gerente.columns[1:],  # Status Final (OK, PENDENTE)
+                values=pizza_gerente.loc[0, pizza_gerente.columns[1:]],  # Valores da primeira linha filtrada
+                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51', 'OUTRO':'#f4a261'},
+                hole=0.4
+            )
+            fig_g.update_traces(textposition='inside', textinfo='percent+label')
+            fig_g.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'))
+            st.plotly_chart(fig_g, use_container_width=True)
+        else:
+            st.write("Sem dados para Gerente.")
+
+    # Pizza por Coordenador
+    pizza_coord = df_filtrado.groupby('COORDENADOR')['Status_Final'].value_counts().unstack(fill_value=0)
+    pizza_coord = pizza_coord.reset_index()
+
+    with col_c:
+        st.markdown("**Coordenador**")
+        if not pizza_coord.empty:
+            fig_c = px.pie(
+                pizza_coord,
+                names=pizza_coord.columns[1:],  # Status Final (OK, PENDENTE)
+                values=pizza_coord.loc[0, pizza_coord.columns[1:]],  # Valores da primeira linha filtrada
+                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51', 'OUTRO':'#f4a261'},
+                hole=0.4
+            )
+            fig_c.update_traces(textposition='inside', textinfo='percent+label')
+            fig_c.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'))
+            st.plotly_chart(fig_c, use_container_width=True)
+        else:
+            st.write("Sem dados para Coordenador.")
 
     st.markdown("---")
 
-    # --- DADOS DETALHADOS ---
     st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
