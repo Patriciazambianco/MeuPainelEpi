@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta
+import io
 
 @st.cache_data
 def carregar_dados():
@@ -15,8 +15,10 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
 
+    # Pega todos os pares Técnico + Produto
     base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
 
+    # Agrupa para pegar a última inspeção válida
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
@@ -24,72 +26,102 @@ def carregar_dados():
         .last()
     )
 
+    # Junta com a base para manter até quem não tem inspeção
     final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
 
-    # Cria coluna "Dias desde a última inspeção"
-    final["Dias_Desde"] = (datetime.today() - final['Data_Inspecao']).dt.days
-
-    # Define status vencido
-    final["Vencido"] = final["Dias_Desde"] > 180
-    final["Status_Final"] = final["Status"].fillna("Sem Inspeção")
-    final.loc[final["Vencido"] == True, "Status_Final"] = "Pendente"
+    # Status final com vencidos
+    final['Dias_Sem_Inspecao'] = (pd.to_datetime("today") - final['Data_Inspecao']).dt.days
+    final['Status_Final'] = final['Status']
+    final.loc[final['Data_Inspecao'].isna(), 'Status_Final'] = 'Pendente'
+    final.loc[final['Dias_Sem_Inspecao'] > 180, 'Status_Final'] = 'Pendente'
 
     return final
 
 def show():
     st.set_page_config(page_title="Dashboard EPI", layout="wide")
-    st.title("📊 Dashboard de Inspeções EPI")
+    st.title("📊 Dashboard de Inspeções de EPI")
 
     df = carregar_dados()
 
-    gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
-    gerente_sel = st.sidebar.selectbox("👨‍💼 Gerente", gerentes)
+    # Filtro lateral
+    gerentes = df['GERENTE_IMEDIATO'].dropna().unique().tolist()
+    gerente_sel = st.sidebar.selectbox("👔 Gerente", gerentes)
 
     df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
-    coords = df_gerente['COORDENADOR'].dropna().unique()
-    coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coords, default=coords)
-
-    status_options = ["Todos", "OK", "Pendente", "Sem Inspeção"]
-    status_sel = st.sidebar.selectbox("📋 Status da Inspeção", status_options)
+    coords = df_gerente['COORDENADOR'].dropna().unique().tolist()
+    coord_sel = st.sidebar.multiselect("🧑‍💼 Coordenador", options=coords, default=coords)
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
-    if status_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['Status_Final'] == status_sel]
-
-    st.subheader("📌 Indicadores")
+    # KPIs
+    st.subheader("📌 Indicadores Gerais")
     total = df_filtrado.shape[0]
     pendentes = (df_filtrado['Status_Final'] == 'Pendente').sum()
-    oks = (df_filtrado['Status_Final'] == 'OK').sum()
-    sem_inspecao = (df_filtrado['Status_Final'] == 'Sem Inspeção').sum()
+    pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Registros", total)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Inspeções", total)
     col2.metric("Pendentes", pendentes)
-    col3.metric("OK", oks)
-    col4.metric("Sem Inspeção", sem_inspecao)
+    col3.metric("% OK", f"{pct_ok:.1f}%")
 
+    # Gráfico de barras por produto
     st.subheader("📦 Inspeções por Produto")
-    if not df_filtrado.empty:
-        fig = px.histogram(df_filtrado, x="PRODUTO_SIMILAR", color="Status_Final", barmode="group")
+    fig = px.histogram(df_filtrado, x="PRODUTO_SIMILAR", color="Status_Final", barmode="group")
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Pizza por gerente
+    st.subheader("🥧 Status por Gerente")
+    df_gerente_pie = df.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack().fillna(0)
+
+    for gerente in df_gerente_pie.index:
+        st.markdown(f"**👨‍💼 {gerente}**")
+        fig = px.pie(
+            names=df_gerente_pie.columns,
+            values=df_gerente_pie.loc[gerente],
+            title=f"Status - {gerente}",
+            hole=0.4,
+            color_discrete_map={"OK": "green", "Pendente": "red"}
+        )
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Nenhum dado encontrado para os filtros selecionados.")
 
-    st.subheader("🥧 Comparativo por Coordenador")
-    if not df_filtrado.empty:
-        df_pie = df_filtrado.groupby(['COORDENADOR', 'Status_Final']).size().reset_index(name='Contagem')
-        for coord in df_pie['COORDENADOR'].unique():
-            df_coord = df_pie[df_pie['COORDENADOR'] == coord]
-            fig = px.pie(df_coord, names='Status_Final', values='Contagem', title=f"Status - {coord}", hole=0.4)
-            st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Nenhum coordenador com dados disponíveis.")
+    # Pizza por coordenador
+    st.subheader("🥧 Status por Coordenador")
+    df_coord_pie = df.groupby('COORDENADOR')['Status_Final'].value_counts().unstack().fillna(0)
 
+    for coord in df_coord_pie.index:
+        st.markdown(f"**👩‍💼 {coord}**")
+        fig = px.pie(
+            names=df_coord_pie.columns,
+            values=df_coord_pie.loc[coord],
+            title=f"Status - {coord}",
+            hole=0.4,
+            color_discrete_map={"OK": "green", "Pendente": "red"}
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Tabela
     st.subheader("📋 Dados Detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
+    # Botão de exportar pendentes
+    df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'Pendente']
+
+    if not df_pendentes.empty:
+        towrite = io.BytesIO()
+        with pd.ExcelWriter(towrite, engine='xlsxwriter') as writer:
+            df_pendentes.to_excel(writer, index=False, sheet_name='Pendentes')
+        towrite.seek(0)
+        st.download_button(
+            label="📤 Exportar Pendentes para Excel",
+            data=towrite,
+            file_name="pendencias_epi.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("✅ Nenhuma pendência encontrada nos filtros aplicados.")
+
 if __name__ == "__main__":
     show()
+
 
