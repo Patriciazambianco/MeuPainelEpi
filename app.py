@@ -85,12 +85,13 @@ def show():
     def color_metric(label, value, color):
         st.markdown(f"""
         <div style='
-            padding:12px; 
-            border-radius:10px; 
+            padding:10px; 
+            border-radius:8px; 
             background-color:{color}; 
             color:white; 
             text-align:center;
             font-family:sans-serif;
+            font-size:14px;
             '>
             <h5 style='margin-bottom:4px'>{label}</h5>
             <h2 style='margin-top:0'>{value}</h2>
@@ -112,47 +113,46 @@ def show():
 
     st.markdown("---")
 
-    # Gráficos de pizza lado a lado
-    st.subheader("🍕 Status das Inspeções por Gerente e Coordenador")
+    st.subheader("🍕 Status das Inspeções por Gerente e Coordenador (geral)")
 
     col_g, col_c = st.columns(2)
 
-    # Pizza por Gerente
-    pizza_gerente = df_filtrado.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack(fill_value=0)
-    pizza_gerente = pizza_gerente.reset_index()
+    # Total geral por Status para Gerente
+    pizza_gerente = df.groupby('GERENTE_IMEDIATO')['Status_Final'].value_counts().unstack(fill_value=0).sum(axis=0)
+    pizza_gerente = pizza_gerente[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(pizza_gerente.index) else pizza_gerente
+
+    # Total geral por Status para Coordenador
+    pizza_coord = df.groupby('COORDENADOR')['Status_Final'].value_counts().unstack(fill_value=0).sum(axis=0)
+    pizza_coord = pizza_coord[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(pizza_coord.index) else pizza_coord
 
     with col_g:
-        st.markdown("**Gerente**")
+        st.markdown("**Gerente (Geral)**")
         if not pizza_gerente.empty:
             fig_g = px.pie(
-                pizza_gerente,
-                names=pizza_gerente.columns[1:],  # Status Final (OK, PENDENTE)
-                values=pizza_gerente.loc[0, pizza_gerente.columns[1:]],  # Valores da primeira linha filtrada
-                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51', 'OUTRO':'#f4a261'},
+                names=pizza_gerente.index,
+                values=pizza_gerente.values,
+                color=pizza_gerente.index,
+                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51'},
                 hole=0.4
             )
             fig_g.update_traces(textposition='inside', textinfo='percent+label')
-            fig_g.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'))
+            fig_g.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'), height=300)
             st.plotly_chart(fig_g, use_container_width=True)
         else:
             st.write("Sem dados para Gerente.")
 
-    # Pizza por Coordenador
-    pizza_coord = df_filtrado.groupby('COORDENADOR')['Status_Final'].value_counts().unstack(fill_value=0)
-    pizza_coord = pizza_coord.reset_index()
-
     with col_c:
-        st.markdown("**Coordenador**")
+        st.markdown("**Coordenador (Geral)**")
         if not pizza_coord.empty:
             fig_c = px.pie(
-                pizza_coord,
-                names=pizza_coord.columns[1:],  # Status Final (OK, PENDENTE)
-                values=pizza_coord.loc[0, pizza_coord.columns[1:]],  # Valores da primeira linha filtrada
-                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51', 'OUTRO':'#f4a261'},
+                names=pizza_coord.index,
+                values=pizza_coord.values,
+                color=pizza_coord.index,
+                color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51'},
                 hole=0.4
             )
             fig_c.update_traces(textposition='inside', textinfo='percent+label')
-            fig_c.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'))
+            fig_c.update_layout(margin=dict(t=0,b=0,l=0,r=0), legend=dict(orientation='h'), height=300)
             st.plotly_chart(fig_c, use_container_width=True)
         else:
             st.write("Sem dados para Coordenador.")
