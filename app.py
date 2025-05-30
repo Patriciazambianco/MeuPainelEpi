@@ -87,27 +87,39 @@ def show():
     st.subheader("📋 Dados Detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=300)
 
-    # Gráfico % Checklists por dia e gerente
-    st.subheader("📅 % Checklists por Dia e Gerente")
+    # Gráfico % Checklists OK e Pendentes por dia e gerente
+    st.subheader("📅 % Checklists OK e Pendentes por Dia e Gerente")
     df_datas = df_filtrado.dropna(subset=['Data_Inspecao']).copy()
     if not df_datas.empty:
         df_agg = (
             df_datas.groupby(['Data_Inspecao', 'GERENTE_IMEDIATO'])
             .agg(total_inspecoes=('Status_Final', 'count'),
-                 ok_inspecoes=('Status_Final', lambda x: (x == 'OK').sum()))
+                 ok_inspecoes=('Status_Final', lambda x: (x == 'OK').sum()),
+                 pendente_inspecoes=('Status_Final', lambda x: (x == 'PENDENTE').sum()))
             .reset_index()
         )
         df_agg['pct_ok'] = (df_agg['ok_inspecoes'] / df_agg['total_inspecoes']) * 100
+        df_agg['pct_pendente'] = (df_agg['pendente_inspecoes'] / df_agg['total_inspecoes']) * 100
 
         fig = px.line(
-            df_agg,
+            df_agg.melt(id_vars=['Data_Inspecao', 'GERENTE_IMEDIATO'], 
+                        value_vars=['pct_ok', 'pct_pendente'],
+                        var_name='Status', value_name='Percentual'),
             x='Data_Inspecao',
-            y='pct_ok',
-            color='GERENTE_IMEDIATO',
+            y='Percentual',
+            color='Status',
+            line_dash='GERENTE_IMEDIATO',
             markers=True,
-            labels={'pct_ok': '% Checklists OK', 'Data_Inspecao': 'Data da Inspeção', 'GERENTE_IMEDIATO': 'Gerente'},
-            title='% Checklists OK ao longo do tempo por Gerente'
+            labels={
+                'Data_Inspecao': 'Data da Inspeção',
+                'Percentual': '% Checklists',
+                'Status': 'Status',
+                'GERENTE_IMEDIATO': 'Gerente'
+            },
+            title='% Checklists OK e Pendentes por Dia e Gerente'
         )
+        # Ajustar nomes da legenda
+        fig.for_each_trace(lambda t: t.update(name=t.name.replace('pct_ok','OK').replace('pct_pendente','Pendente')))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Nenhum dado de inspeção disponível para o filtro selecionado.")
