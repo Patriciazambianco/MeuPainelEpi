@@ -6,6 +6,7 @@ from io import BytesIO
 st.set_page_config(page_title="Dashboard de EPI", layout="wide")
 
 @st.cache_data
+
 def carregar_dados():
     df = pd.read_excel("LISTA DE VERIFICAÇÃO EPI.xlsx", engine="openpyxl")
     df.columns = df.columns.str.strip()
@@ -17,16 +18,16 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
 
-    base = df[['TECNICO', 'PRODUTO_PRINC_INSPECAO']].drop_duplicates()
+    base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
 
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
-        .groupby(['TECNICO', 'PRODUTO_PRINC_INSPECAO'], as_index=False)
+        .groupby(['TECNICO', 'PRODUTO_SIMILAR'], as_index=False)
         .last()
     )
 
-    final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_PRINC_INSPECAO'], how='left')
+    final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
 
     final['Status_Final'] = final['Status_Final'].str.upper()
 
@@ -44,7 +45,8 @@ def exportar_excel(df):
 
 def plot_pie_chart(df, group_col, title_prefix):
     grouped = df.groupby(group_col)['Status_Final'].value_counts().unstack(fill_value=0)
-    grouped = grouped[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(grouped.columns) else grouped
+    if 'OK' not in grouped.columns: grouped['OK'] = 0
+    if 'PENDENTE' not in grouped.columns: grouped['PENDENTE'] = 0
 
     charts = []
     for grupo in grouped.index:
@@ -68,7 +70,7 @@ def show():
     df = carregar_dados()
 
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
-    gerente_sel = st.sidebar.selectbox("\U0001F468‍F4BC Selecione o Gerente", ["Todos"] + gerentes)
+    gerente_sel = st.sidebar.selectbox("\U0001F468‍\U0001F4BC Selecione o Gerente", ["Todos"] + gerentes)
 
     if gerente_sel != "Todos":
         df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
@@ -76,7 +78,7 @@ def show():
         df_gerente = df.copy()
 
     coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
-    coord_sel = st.sidebar.multiselect("\U0001F469‍F4BC Coordenador", options=coordenadores, default=coordenadores)
+    coord_sel = st.sidebar.multiselect("\U0001F469‍\U0001F4BC Coordenador", options=coordenadores, default=coordenadores)
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
@@ -106,8 +108,8 @@ def show():
     def color_metric(label, value, color):
         st.markdown(f"""
         <div style='
-            padding:8px; 
-            border-radius:6px; 
+            padding:6px; 
+            border-radius:10px; 
             background-color:{color}; 
             color:white; 
             text-align:center;
