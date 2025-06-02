@@ -86,50 +86,47 @@ def show():
 
     df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']
     st.download_button(
-        label="📅 Baixar Pendentes (.xlsx)",
+        label="📥 Baixar Pendentes (.xlsx)",
         data=exportar_excel(df_pendentes),
         file_name="pendentes_epi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    total = df_filtrado.shape[0]
-    pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
-    pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
+    total = df_filtrado.shape[0] if df_filtrado.shape[0] > 0 else 1
+    pct_pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum() / total * 100
+    pct_ok = (df_filtrado['Status_Final'] == 'OK').sum() / total * 100
 
     num_tecnicos = df_filtrado['TECNICO'].nunique()
     tecnicos_inspecionaram = df_filtrado[df_filtrado['Data_Inspecao'].notnull()]['TECNICO'].nunique()
-    tecnicos_nao_inspecionaram = num_tecnicos - tecnicos_inspecionaram
+    pct_tecnicos_inspecionaram = tecnicos_inspecionaram / num_tecnicos * 100 if num_tecnicos > 0 else 0
+    pct_tecnicos_nao_inspecionaram = 100 - pct_tecnicos_inspecionaram
 
-    col1, col2, col3, col4, col5, col6 = st.columns([1,1,1,1,1,1])
+    col1, col2, col3, col4 = st.columns(4)
 
     def color_metric(label, value, color):
         st.markdown(f"""
         <div style='
-            padding:6px; 
-            border-radius:8px; 
+            padding:8px; 
+            border-radius:6px; 
             background-color:{color}; 
             color:white; 
             text-align:center;
             font-family:sans-serif;
-            font-size:12px;
+            font-size:13px;
             '>
-            <h6 style='margin-bottom:4px'>{label}</h6>
-            <h3 style='margin-top:0'>{value}</h3>
+            <h5 style='margin-bottom:4px'>{label}</h5>
+            <h3 style='margin-top:0'>{value:.1f}%</h3>
         </div>
         """, unsafe_allow_html=True)
 
     with col1:
-        color_metric("Total Inspeções", total, "#2a9d8f")
+        color_metric("% OK", pct_ok, "#2a9d8f")
     with col2:
-        color_metric("Pendentes", pendentes, "#e76f51")
+        color_metric("% Pendentes", pct_pendentes, "#e76f51")
     with col3:
-        color_metric("% OK", f"{pct_ok:.1f}%", "#264653")
+        color_metric("% Técnicos com Inspeção", pct_tecnicos_inspecionaram, "#f4a261")
     with col4:
-        color_metric("Técnicos", num_tecnicos, "#f4a261")
-    with col5:
-        color_metric("Téc. que Inspecionaram", tecnicos_inspecionaram, "#2a9d8f")
-    with col6:
-        color_metric("Téc. não Inspecionaram", tecnicos_nao_inspecionaram, "#e76f51")
+        color_metric("% Técnicos sem Inspeção", pct_tecnicos_nao_inspecionaram, "#e76f51")
 
     st.markdown("---")
 
@@ -156,3 +153,4 @@ def show():
 
 if __name__ == "__main__":
     show()
+
