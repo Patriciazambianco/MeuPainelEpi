@@ -16,7 +16,6 @@ def carregar_dados():
     }, inplace=True)
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
-
     base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
 
     ultimas = (
@@ -27,9 +26,7 @@ def carregar_dados():
     )
 
     final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
-
     final['Status_Final'] = final['Status_Final'].str.upper()
-
     hoje = pd.Timestamp.now().normalize()
     final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
     final['Vencido'] = final['Dias_Sem_Inspecao'] > 180
@@ -45,20 +42,20 @@ def exportar_excel(df):
 def plot_pie_chart(df, group_col, title_prefix):
     grouped = df.groupby(group_col)['Status_Final'].value_counts().unstack(fill_value=0)
     grouped = grouped[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(grouped.columns) else grouped
-
     charts = []
+
     for grupo in grouped.index:
         valores = grouped.loc[grupo]
         fig = px.pie(
             names=valores.index,
             values=valores.values,
             color=valores.index,
-            color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51'},
+            color_discrete_map={'OK': '#2a9d8f', 'PENDENTE': '#e76f51'},
             hole=0.4,
             title=f"{title_prefix}: {grupo}"
         )
         fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(margin=dict(t=30,b=0,l=0,r=0), height=250, showlegend=False)
+        fig.update_layout(margin=dict(t=30, b=0, l=0, r=0), height=250, showlegend=False)
         charts.append(fig)
     return charts
 
@@ -84,6 +81,7 @@ def show():
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido']]
 
+    # Exportar antes de qualquer coisa
     df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']
     st.download_button(
         label="📥 Baixar Pendentes (.xlsx)",
@@ -92,30 +90,30 @@ def show():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Indicadores gerais
+    # Indicadores
     total = df_filtrado.shape[0]
     pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum()
     pct_ok = (df_filtrado['Status_Final'] == 'OK').mean() * 100 if total > 0 else 0
-
     num_tecnicos = df_filtrado['TECNICO'].nunique()
     tecnicos_inspecionaram = df_filtrado[df_filtrado['Data_Inspecao'].notnull()]['TECNICO'].nunique()
     tecnicos_nao_inspecionaram = num_tecnicos - tecnicos_inspecionaram
 
-    col1, col2, col3, col4, col5, col6 = st.columns([1,1,1,1,1,1])
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
     def color_metric(label, value, color):
         st.markdown(f"""
         <div style='
-            padding:10px; 
-            border-radius:8px; 
+            padding:5px; 
+            border-radius:6px; 
             background-color:{color}; 
             color:white; 
             text-align:center;
             font-family:sans-serif;
-            font-size:14px;
+            font-size:13px;
+            height:80px;
             '>
             <h5 style='margin-bottom:4px'>{label}</h5>
-            <h2 style='margin-top:0'>{value}</h2>
+            <h3 style='margin-top:0'>{value}</h3>
         </div>
         """, unsafe_allow_html=True)
 
@@ -134,30 +132,57 @@ def show():
 
     st.markdown("---")
 
+    # Gráfico de tendência
+    st.subheader("📈 Tendência de % OK e Pendentes ao Longo do Tempo")
+
+    agrupamento = st.selectbox("Agrupar por:", ["Dia", "Semana", "Mês"])
+    df_tendencia = df_filtrado.dropna(subset=['Data_Inspecao']).copy()
+
+    if agrupamento == "Semana":
+        df_tendencia['Periodo'] = df_tendencia['Data_Inspecao'].dt.to_period('W').apply(lambda r: r.start_time)
+    elif agrupamento == "Mês":
+        df_tendencia['Periodo'] = df_tendencia['Data_Inspecao'].dt.to_period('M').apply(lambda r: r.start_time)
+    else:
+        df_tendencia['Periodo'] = df_tendencia['Data_Inspecao']
+
+    tendencia = (
+        df_tendencia
+        .groupby(['Periodo', 'Status_Final'])
+        .size()
+        .reset_index(name='count')
+        .pivot(index='Periodo', columns='Status_Final', values='count')
+        .fillna(0)
+    )
+
+    tendencia['% OK'] = tendencia['OK'] / tendencia.sum(axis=1) * 100
+    tendencia['% PENDENTE'] = tendencia['PENDENTE'] / tendencia.sum(axis=1) * 100
+    tendencia = tendencia[['% OK', '% PENDENTE']].reset_index()
+
+    fig_tendencia = px.line(
+        tendencia,
+        x='Periodo',
+        y=['% OK', '% PENDENTE'],
+        markers=True,
+        color_discrete_map={'% OK': '#2a9d8f', '% PENDENTE': '#e76f51'}
+    )
+    fig_tendencia.update_layout(xaxis_title="Data", yaxis_title="Porcentagem", legend_title="Status")
+    st.plotly_chart(fig_tendencia, use_container_width=True)
+
+    st.markdown("---")
     st.subheader("🍕 Status das Inspeções por Gerente")
-
-    graficos_gerente = plot_pie_chart(df_filtrado, 'GERENTE_IMEDIATO', "Gerente")
-
-    # Mostrando os gráficos dos gerentes em 3 colunas
-    for i in range(0, len(graficos_gerente), 3):
+    for i in range(0, len(graficos := plot_pie_chart(df_filtrado, 'GERENTE_IMEDIATO', "Gerente")), 3):
         cols = st.columns(3)
-        for j, fig in enumerate(graficos_gerente[i:i+3]):
+        for j, fig in enumerate(graficos[i:i+3]):
             cols[j].plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-
     st.subheader("🍕 Status das Inspeções por Coordenador")
-
-    graficos_coord = plot_pie_chart(df_filtrado, 'COORDENADOR', "Coordenador")
-
-    # Mostrando os gráficos dos coordenadores em 3 colunas
-    for i in range(0, len(graficos_coord), 3):
+    for i in range(0, len(graficos := plot_pie_chart(df_filtrado, 'COORDENADOR', "Coordenador")), 3):
         cols = st.columns(3)
-        for j, fig in enumerate(graficos_coord[i:i+3]):
+        for j, fig in enumerate(graficos[i:i+3]):
             cols[j].plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-
     st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
