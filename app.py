@@ -5,7 +5,7 @@ from io import BytesIO
 import requests
 
 @st.cache_data
-def carregar_dados_github(url):
+def carregar_dados_github(https://github.com/Patriciazambianco/MeuPainelEpi/blob/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx):
     response = requests.get(url)
     response.raise_for_status()
     df = pd.read_excel(BytesIO(response.content))
