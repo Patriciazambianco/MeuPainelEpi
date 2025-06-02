@@ -101,16 +101,15 @@ def show():
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
-    # Filtro para buscar pelo nome do técnico
-    tecnicos_disponiveis = sorted(df_filtrado['TECNICO'].dropna().unique())
-    nome_tec = st.sidebar.text_input("🔍 Buscar Técnico pelo nome")
-
-    if nome_tec:
-        df_filtrado = df_filtrado[df_filtrado['TECNICO'].str.contains(nome_tec, case=False, na=False)]
-
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido']]
+
+    # Filtrar por nome do técnico (forçando string antes para evitar erros)
+    df_filtrado['TECNICO'] = df_filtrado['TECNICO'].astype(str)
+    nome_tec = st.sidebar.text_input("🔍 Buscar Técnico pelo nome")
+    if nome_tec:
+        df_filtrado = df_filtrado[df_filtrado['TECNICO'].str.contains(nome_tec, case=False, na=False)]
 
     df_pendentes = df_filtrado[df_filtrado['STATUS CHECK LIST'] == 'PENDENTE']
     st.download_button(
@@ -124,7 +123,29 @@ def show():
     pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
     pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
-    # Removidos os cards de técnicos (como você pediu!)
+    # Exibir só os dois cards (% OK e % Pendentes)
+    col1, col2 = st.columns(2)
+    def color_metric(label, value, color, unit="%"):
+        st.markdown(f"""
+        <div style='
+            padding:8px; 
+            border-radius:10px; 
+            background-color:{color}; 
+            color:white; 
+            text-align:center;
+            font-family:sans-serif;
+            font-size:13px;
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+            '>
+            <h5 style='margin-bottom:4px'>{label}</h5>
+            <h3 style='margin-top:0'>{value:.1f}{unit}</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col1:
+        color_metric("% OK", pct_ok, "#2a9d8f")
+    with col2:
+        color_metric("% Pendentes", pct_pendentes, "#e76f51")
 
     st.markdown("---")
 
