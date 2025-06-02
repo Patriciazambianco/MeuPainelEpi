@@ -114,7 +114,7 @@ def show():
     )
 
     total = df_filtrado.shape[0] if df_filtrado.shape[0] > 0 else 1
-    pct_pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum() / total * 100
+    pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
     pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
     num_tecnicos = df_filtrado['TECNICO'].nunique()
