@@ -17,16 +17,16 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
 
-    base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
+    base = df[['TECNICO', 'PRODUTO_PRINC_INSPECAO']].drop_duplicates()
 
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
-        .groupby(['TECNICO', 'PRODUTO_SIMILAR'], as_index=False)
+        .groupby(['TECNICO', 'PRODUTO_PRINC_INSPECAO'], as_index=False)
         .last()
     )
 
-    final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
+    final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_PRINC_INSPECAO'], how='left')
 
     final['Status_Final'] = final['Status_Final'].str.upper()
 
@@ -63,12 +63,12 @@ def plot_pie_chart(df, group_col, title_prefix):
     return charts
 
 def show():
-    st.title("📊 Dashboard de Inspeções EPI")
+    st.title("\U0001F4CA Dashboard de Inspeções EPI")
 
     df = carregar_dados()
 
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
-    gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", ["Todos"] + gerentes)
+    gerente_sel = st.sidebar.selectbox("\U0001F468‍F4BC Selecione o Gerente", ["Todos"] + gerentes)
 
     if gerente_sel != "Todos":
         df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
@@ -76,17 +76,17 @@ def show():
         df_gerente = df.copy()
 
     coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
-    coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
+    coord_sel = st.sidebar.multiselect("\U0001F469‍F4BC Coordenador", options=coordenadores, default=coordenadores)
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
-    so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
+    so_vencidos = st.sidebar.checkbox("\U0001F534 Mostrar apenas vencidos > 180 dias")
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido']]
 
     df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']
     st.download_button(
-        label="📥 Baixar Pendentes (.xlsx)",
+        label="\U0001F4E5 Baixar Pendentes (.xlsx)",
         data=exportar_excel(df_pendentes),
         file_name="pendentes_epi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -130,7 +130,7 @@ def show():
 
     st.markdown("---")
 
-    st.subheader("🍕 Status das Inspeções por Gerente")
+    st.subheader("\U0001F355 Status das Inspeções por Gerente")
     graficos_gerente = plot_pie_chart(df_filtrado, 'GERENTE_IMEDIATO', "Gerente")
     for i in range(0, len(graficos_gerente), 3):
         cols = st.columns(3)
@@ -139,7 +139,7 @@ def show():
 
     st.markdown("---")
 
-    st.subheader("🍕 Status das Inspeções por Coordenador")
+    st.subheader("\U0001F355 Status das Inspeções por Coordenador")
     graficos_coord = plot_pie_chart(df_filtrado, 'COORDENADOR', "Coordenador")
     for i in range(0, len(graficos_coord), 3):
         cols = st.columns(3)
@@ -148,9 +148,8 @@ def show():
 
     st.markdown("---")
 
-    st.subheader("📋 Dados detalhados")
+    st.subheader("\U0001F4CB Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
 if __name__ == "__main__":
     show()
-
