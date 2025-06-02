@@ -107,7 +107,7 @@ def show():
 
     df_pendentes = df_filtrado[df_filtrado['STATUS CHECK LIST'] == 'PENDENTE']
     st.download_button(
-        label="📥 Baixar Pendentes (.xlsx)",
+        label="📅 Baixar Pendentes (.xlsx)",
         data=exportar_excel(df_pendentes),
         file_name="pendentes_epi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -122,21 +122,26 @@ def show():
     pct_tecnicos_inspecionaram = tecnicos_inspecionaram / num_tecnicos * 100 if num_tecnicos > 0 else 0
     pct_tecnicos_nao_inspecionaram = 100 - pct_tecnicos_inspecionaram
 
-    col1, col2, col3, col4 = st.columns(4)
+    total_tecnicos = num_tecnicos
+    tecnicos_com_inspecao = tecnicos_inspecionaram
+    tecnicos_sem_inspecao = total_tecnicos - tecnicos_com_inspecao
 
-    def color_metric(label, value, color):
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+    def color_metric(label, value, color, unit="%"):
         st.markdown(f"""
         <div style='
             padding:8px; 
-            border-radius:8px; 
+            border-radius:10px; 
             background-color:{color}; 
             color:white; 
             text-align:center;
             font-family:sans-serif;
             font-size:13px;
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
             '>
             <h5 style='margin-bottom:4px'>{label}</h5>
-            <h3 style='margin-top:0'>{value:.1f}%</h3>
+            <h3 style='margin-top:0'>{value:.1f}{unit}</h3>
         </div>
         """, unsafe_allow_html=True)
 
@@ -148,6 +153,10 @@ def show():
         color_metric("% Técnicos com Inspeção", pct_tecnicos_inspecionaram, "#f4a261")
     with col4:
         color_metric("% Técnicos sem Inspeção", pct_tecnicos_nao_inspecionaram, "#e76f51")
+    with col5:
+        color_metric("Qtd com inspeção", tecnicos_com_inspecao, "#264653", unit="")
+    with col6:
+        color_metric("Qtd sem inspeção", tecnicos_sem_inspecao, "#6d6875", unit="")
 
     st.markdown("---")
 
