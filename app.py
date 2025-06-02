@@ -29,26 +29,41 @@ def carregar_dados():
         'SITUAÇÃO CHECK LIST': 'STATUS CHECK LIST'
     }, inplace=True)
 
+    # Convertendo para datetime (se der problema vira NaT)
     df['Data_Inspecao'] = pd.to_datetime(df[data_col], errors='coerce')
 
+    # Passo 1: base única técnico + produto
     base = df[[tecnico_col, produto_col]].drop_duplicates()
 
-    ultimas = (
+    # Passo 2: última data de inspeção válida (max)
+    ultimas_data = (
         df.dropna(subset=['Data_Inspecao'])
-        .sort_values('Data_Inspecao')
         .groupby([tecnico_col, produto_col], as_index=False)
-        .last()
+        .agg({'Data_Inspecao': 'max'})
     )
 
-    final = pd.merge(base, ultimas, on=[tecnico_col, produto_col], how='left')
+    # Passo 3: merge para manter linhas sem data (left join)
+    final = pd.merge(base, ultimas_data, on=[tecnico_col, produto_col], how='left')
+
+    # Passo 4: juntar demais informações da última inspeção para as linhas com data
+    ultimas_linhas = df.merge(ultimas_data, on=[tecnico_col, produto_col, 'Data_Inspecao'], how='right')
+
+    # Para linhas sem data (NaT), pegamos só base, preenchendo colunas adicionais com NaN
+    final = final.merge(
+        ultimas_linhas.drop(columns=[tecnico_col, produto_col, 'Data_Inspecao']),
+        left_index=True, right_index=True, how='left'
+    )
 
     final.rename(columns={
         tecnico_col: 'TECNICO',
         produto_col: 'PRODUTO'
     }, inplace=True)
 
-    final['STATUS CHECK LIST'] = final['STATUS CHECK LIST'].str.upper()
+    # Ajuste STATUS CHECK LIST para upper (se existir)
+    if 'STATUS CHECK LIST' in final.columns:
+        final['STATUS CHECK LIST'] = final['STATUS CHECK LIST'].str.upper()
 
+    # Calcula dias sem inspeção e vencimento
     hoje = pd.Timestamp.now().normalize()
     final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
     final['Vencido'] = final['Dias_Sem_Inspecao'] > 180
@@ -117,7 +132,6 @@ def show():
     pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
     pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
-    # Só os dois cards de OK e Pendentes
     col1, col2 = st.columns(2)
     def color_metric(label, value, color, unit="%"):
         st.markdown(f"""
