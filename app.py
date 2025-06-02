@@ -117,17 +117,7 @@ def show():
     pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
     pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
-    num_tecnicos = df_filtrado['TECNICO'].nunique()
-    tecnicos_inspecionaram = df_filtrado[df_filtrado['Data_Inspecao'].notnull()]['TECNICO'].nunique()
-    pct_tecnicos_inspecionaram = tecnicos_inspecionaram / num_tecnicos * 100 if num_tecnicos > 0 else 0
-    pct_tecnicos_nao_inspecionaram = 100 - pct_tecnicos_inspecionaram
-
-    total_tecnicos = num_tecnicos
-    tecnicos_com_inspecao = tecnicos_inspecionaram
-    tecnicos_sem_inspecao = total_tecnicos - tecnicos_com_inspecao
-
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-
+    
     def color_metric(label, value, color, unit="%"):
         st.markdown(f"""
         <div style='
