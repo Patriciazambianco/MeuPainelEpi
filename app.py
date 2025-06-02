@@ -105,7 +105,7 @@ def show():
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido']]
 
-    df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']
+    df_pendentes = df_filtrado[df_filtrado['STATUS CHECK LIST'] == 'PENDENTE']
     st.download_button(
         label="📥 Baixar Pendentes (.xlsx)",
         data=exportar_excel(df_pendentes),
@@ -115,7 +115,7 @@ def show():
 
     total = df_filtrado.shape[0] if df_filtrado.shape[0] > 0 else 1
     pct_pendentes = (df_filtrado['Status_Final'] == 'PENDENTE').sum() / total * 100
-    pct_ok = (df_filtrado['Status_Final'] == 'OK').sum() / total * 100
+    pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
     num_tecnicos = df_filtrado['TECNICO'].nunique()
     tecnicos_inspecionaram = df_filtrado[df_filtrado['Data_Inspecao'].notnull()]['TECNICO'].nunique()
