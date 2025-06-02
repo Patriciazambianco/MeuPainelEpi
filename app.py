@@ -2,40 +2,50 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from io import BytesIO
+import unicodedata
 
 st.set_page_config(page_title="Dashboard de EPI", layout="wide")
+
+def remove_acentos(txt):
+    return ''.join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
 
 @st.cache_data
 def carregar_dados():
     df = pd.read_excel("LISTA DE VERIFICAÇÃO EPI.xlsx", engine="openpyxl")
-    df.columns = df.columns.str.strip()
+
+    # Normaliza nomes das colunas: remove acentos, espaços e coloca maiúsculas
+    df.columns = [remove_acentos(col).strip().upper() for col in df.columns]
 
     st.write("🕵️‍♀️ Colunas encontradas no arquivo:", df.columns.tolist())
 
-    col_tec = [col for col in df.columns if 'TECNICO' in col.upper()]
-    col_prod = [col for col in df.columns if 'PRODUTO' in col.upper()]
-    col_data = [col for col in df.columns if 'INSPECAO' in col.upper()]
+    # Identifica colunas TECNICO, PRODUTO, INSPECAO
+    col_tec = [col for col in df.columns if 'TECNICO' in col]
+    col_prod = [col for col in df.columns if 'PRODUTO' in col]
+    col_data = [col for col in df.columns if 'INSPECAO' in col]
 
     if not col_tec or not col_prod or not col_data:
-        st.error("❌ Verifique se o arquivo contém colunas de TÉCNICO, PRODUTO e INSPEÇÃO.")
+        st.error("❌ Verifique se o arquivo contém colunas de TECNICO, PRODUTO e INSPECAO (sem acentos).")
         return pd.DataFrame()
 
     tecnico_col = col_tec[0]
     produto_col = col_prod[0]
     data_col = col_data[0]
 
-    df.rename(columns={
-        'GERENTE': 'GERENTE_IMEDIATO',
-        'SITUAÇÃO CHECK LIST': 'STATUS CHECK LIST'
-    }, inplace=True)
+    # Renomear colunas importantes (sem acento)
+    rename_map = {}
+    if 'GERENTE' in df.columns:
+        rename_map['GERENTE'] = 'GERENTE_IMEDIATO'
+    if 'SITUACAO CHECK LIST' in df.columns:
+        rename_map['SITUACAO CHECK LIST'] = 'STATUS CHECK LIST'
+    df.rename(columns=rename_map, inplace=True)
 
-    df['Data_Inspecao'] = pd.to_datetime(df[data_col], errors='coerce')
+    df['DATA_INSPECAO'] = pd.to_datetime(df[data_col], errors='coerce')
 
     base = df[[tecnico_col, produto_col]].drop_duplicates()
 
     ultimas = (
-        df.dropna(subset=['Data_Inspecao'])
-        .sort_values('Data_Inspecao')
+        df.dropna(subset=['DATA_INSPECAO'])
+        .sort_values('DATA_INSPECAO')
         .groupby([tecnico_col, produto_col], as_index=False)
         .last()
     )
@@ -47,11 +57,18 @@ def carregar_dados():
         produto_col: 'PRODUTO'
     }, inplace=True)
 
-    final['STATUS CHECK LIST'] = final['STATUS CHECK LIST'].str.upper()
+    # Normaliza coluna STATUS CHECK LIST para maiúscula e tratar NaN
+    final['STATUS CHECK LIST'] = final['STATUS CHECK LIST'].fillna('PENDENTE').str.upper()
 
     hoje = pd.Timestamp.now().normalize()
-    final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
-    final['Vencido'] = final['Dias_Sem_Inspecao'] > 180
+    final['DIAS_SEM_INSPECAO'] = (hoje - final['DATA_INSPECAO']).dt.days
+    final['VENCIDO'] = final['DIAS_SEM_INSPECAO'] > 180
+
+    # Colunas GERENTE_IMEDIATO e COORDENADOR (sem acento)
+    if 'GERENTE_IMEDIATO' not in final.columns:
+        final['GERENTE_IMEDIATO'] = "Sem Gerente"
+    if 'COORDENADOR' not in final.columns:
+        final['COORDENADOR'] = "Sem Coordenador"
 
     return final
 
@@ -63,7 +80,11 @@ def exportar_excel(df):
 
 def plot_pie_chart(df, group_col, title_prefix):
     grouped = df.groupby(group_col)['STATUS CHECK LIST'].value_counts().unstack(fill_value=0)
-    grouped = grouped[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(grouped.columns) else grouped
+    # Garante que as colunas existam
+    for col in ['OK', 'PENDENTE']:
+        if col not in grouped.columns:
+            grouped[col] = 0
+    grouped = grouped[['OK', 'PENDENTE']]
 
     charts = []
     for grupo in grouped.index:
@@ -101,15 +122,15 @@ def show():
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
+    # **Filtro para buscar pelo nome do técnico**
+    nome_tec = st.sidebar.text_input("🔍 Buscar Técnico pelo nome")
+    if nome_tec.strip() != "":
+        df_filtrado['TECNICO'] = df_filtrado['TECNICO'].fillna('').astype(str)
+        df_filtrado = df_filtrado[df_filtrado['TECNICO'].str.contains(nome_tec, case=False, na=False)]
+
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
     if so_vencidos:
-        df_filtrado = df_filtrado[df_filtrado['Vencido']]
-
-    # Filtrar por nome do técnico (forçando string antes para evitar erros)
-    df_filtrado['TECNICO'] = df_filtrado['TECNICO'].astype(str)
-    nome_tec = st.sidebar.text_input("🔍 Buscar Técnico pelo nome")
-    if nome_tec:
-        df_filtrado = df_filtrado[df_filtrado['TECNICO'].str.contains(nome_tec, case=False, na=False)]
+        df_filtrado = df_filtrado[df_filtrado['VENCIDO']]
 
     df_pendentes = df_filtrado[df_filtrado['STATUS CHECK LIST'] == 'PENDENTE']
     st.download_button(
@@ -123,8 +144,9 @@ def show():
     pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
     pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
-    # Exibir só os dois cards (% OK e % Pendentes)
+    # Só os cards que você pediu: % OK e % Pendentes
     col1, col2 = st.columns(2)
+
     def color_metric(label, value, color, unit="%"):
         st.markdown(f"""
         <div style='
