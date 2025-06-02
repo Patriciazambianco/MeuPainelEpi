@@ -6,11 +6,10 @@ from io import BytesIO
 st.set_page_config(page_title="Dashboard de EPI", layout="wide")
 
 @st.cache_data
+
 def carregar_dados():
     df = pd.read_excel("LISTA DE VERIFICAÇÃO EPI.xlsx", engine="openpyxl")
     df.columns = df.columns.str.strip()
-
-    st.write("🕵️‍♀️ Colunas encontradas no arquivo:", df.columns.tolist())
 
     col_tec = [col for col in df.columns if 'TECNICO' in col.upper()]
     col_prod = [col for col in df.columns if 'PRODUTO' in col.upper()]
@@ -31,35 +30,34 @@ def carregar_dados():
 
     df['Data_Inspecao'] = pd.to_datetime(df[data_col], errors='coerce')
 
-    base = df[[tecnico_col, produto_col]].drop_duplicates()
+    # Separar os que têm data
+    df_com_data = df.dropna(subset=['Data_Inspecao']).copy()
+    df_sem_data = df[df['Data_Inspecao'].isna()].copy()
 
-    ultimas_data = (
-        df.dropna(subset=['Data_Inspecao'])
-        .groupby([tecnico_col, produto_col], as_index=False)
-        .agg({'Data_Inspecao': 'max'})
-    )
+    # Obter a última por técnico + produto
+    df_com_data.sort_values('Data_Inspecao', ascending=True, inplace=True)
+    ultimos = df_com_data.groupby([tecnico_col, produto_col], as_index=False).last()
 
-    final = pd.merge(base, ultimas_data, on=[tecnico_col, produto_col], how='left')
+    # Juntar com os sem data (sem duplicar técnico+produto)
+    base_sem_data = df_sem_data[[tecnico_col, produto_col]].drop_duplicates()
+    base_sem_data = base_sem_data.merge(ultimos[[tecnico_col, produto_col]], on=[tecnico_col, produto_col], how='left', indicator=True)
+    base_sem_data = base_sem_data[base_sem_data['_merge'] == 'left_only'].drop(columns=['_merge'])
+    
+    df_resultado = pd.concat([ultimos, df_sem_data.merge(base_sem_data, on=[tecnico_col, produto_col])], ignore_index=True)
 
-    ultimas_linhas = df.merge(ultimas_data, on=[tecnico_col, produto_col, 'Data_Inspecao'], how='right')
-
-    final = final.merge(
-        ultimas_linhas.drop(columns=[tecnico_col, produto_col, 'Data_Inspecao']),
-        left_index=True, right_index=True, how='left'
-    )
-
-    final.rename(columns={
+    df_resultado.rename(columns={
         tecnico_col: 'TECNICO',
         produto_col: 'PRODUTO'
     }, inplace=True)
 
-    hoje = pd.Timestamp.now().normalize()
-    final['STATUS CHECK LIST'] = final['STATUS CHECK LIST'].fillna('PENDENTE')
-    final['STATUS CHECK LIST'] = final['STATUS CHECK LIST'].str.upper()
-    final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
-    final['Vencido'] = final['Dias_Sem_Inspecao'].isna() | (final['Dias_Sem_Inspecao'] > 180)
+    if 'STATUS CHECK LIST' in df_resultado.columns:
+        df_resultado['STATUS CHECK LIST'] = df_resultado['STATUS CHECK LIST'].str.upper()
 
-    return final
+    hoje = pd.Timestamp.now().normalize()
+    df_resultado['Dias_Sem_Inspecao'] = (hoje - df_resultado['Data_Inspecao']).dt.days
+    df_resultado['Vencido'] = df_resultado['Dias_Sem_Inspecao'] > 180
+
+    return df_resultado
 
 def exportar_excel(df):
     buffer = BytesIO()
@@ -68,7 +66,7 @@ def exportar_excel(df):
     return buffer.getvalue()
 
 def plot_pie_chart(df, group_col, title_prefix):
-    grouped = df.groupby(group_col)['STATUS CHECK LIST'].value_counts().unstack(fill_value=0)
+    grouped = df.groupby(group_col)['STATUS CHECK LIST'].value_counts(dropna=False).unstack(fill_value=0)
     grouped = grouped[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(grouped.columns) else grouped
 
     charts = []
@@ -98,30 +96,27 @@ def show():
     gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", ["Todos"] + gerentes)
 
     if gerente_sel != "Todos":
-        df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
-    else:
-        df_gerente = df.copy()
+        df = df[df['GERENTE_IMEDIATO'] == gerente_sel]
 
-    coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
+    coordenadores = sorted(df['COORDENADOR'].dropna().unique())
     coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
-
-    df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
+    df = df[df['COORDENADOR'].isin(coord_sel)]
 
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
     if so_vencidos:
-        df_filtrado = df_filtrado[df_filtrado['Vencido']]
+        df = df[df['Vencido']]
 
-    df_pendentes = df_filtrado[df_filtrado['STATUS CHECK LIST'] == 'PENDENTE']
+    df_pendentes = df[df['STATUS CHECK LIST'] == 'PENDENTE']
     st.download_button(
-        label="🗕️ Baixar Pendentes (.xlsx)",
+        label="📅 Baixar Pendentes (.xlsx)",
         data=exportar_excel(df_pendentes),
         file_name="pendentes_epi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    total = df_filtrado.shape[0] if df_filtrado.shape[0] > 0 else 1
-    pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
-    pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
+    total = df.shape[0] if df.shape[0] > 0 else 1
+    pct_pendentes = (df['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
+    pct_ok = (df['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
     col1, col2 = st.columns(2)
     def color_metric(label, value, color, unit="%"):
@@ -147,27 +142,22 @@ def show():
         color_metric("% Pendentes", pct_pendentes, "#e76f51")
 
     st.markdown("---")
-
     st.subheader("🍕 Status das Inspeções por Gerente")
-    graficos_gerente = plot_pie_chart(df_filtrado, 'GERENTE_IMEDIATO', "Gerente")
-    for i in range(0, len(graficos_gerente), 3):
+    for i in range(0, len(set(df['GERENTE_IMEDIATO'])), 3):
         cols = st.columns(3)
-        for j, fig in enumerate(graficos_gerente[i:i+3]):
+        for j, fig in enumerate(plot_pie_chart(df, 'GERENTE_IMEDIATO', "Gerente")[i:i+3]):
             cols[j].plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-
     st.subheader("🍕 Status das Inspeções por Coordenador")
-    graficos_coord = plot_pie_chart(df_filtrado, 'COORDENADOR', "Coordenador")
-    for i in range(0, len(graficos_coord), 3):
+    for i in range(0, len(set(df['COORDENADOR'])), 3):
         cols = st.columns(3)
-        for j, fig in enumerate(graficos_coord[i:i+3]):
+        for j, fig in enumerate(plot_pie_chart(df, 'COORDENADOR', "Coordenador")[i:i+3]):
             cols[j].plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-
     st.subheader("📋 Dados detalhados")
-    st.dataframe(df_filtrado.reset_index(drop=True), height=400)
+    st.dataframe(df.reset_index(drop=True), height=400)
 
 if __name__ == "__main__":
     show()
