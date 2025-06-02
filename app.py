@@ -47,7 +47,7 @@ def carregar_dados():
         produto_col: 'PRODUTO'
     }, inplace=True)
 
-    final['Status_Final'] = final['Status_Final'].str.upper()
+    final['STATUS CHECK LIST'] = final['STATUS CHECK LIST'].str.upper()
 
     hoje = pd.Timestamp.now().normalize()
     final['Dias_Sem_Inspecao'] = (hoje - final['Data_Inspecao']).dt.days
