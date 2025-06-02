@@ -26,7 +26,7 @@ def carregar_dados():
 
     df.rename(columns={
         'GERENTE': 'GERENTE_IMEDIATO',
-        'SITUAÇÃO CHECK LIST': 'Status_Final'
+        'SITUAÇÃO CHECK LIST': 'STATUS CHECK LIST'
     }, inplace=True)
 
     df['Data_Inspecao'] = pd.to_datetime(df[data_col], errors='coerce')
