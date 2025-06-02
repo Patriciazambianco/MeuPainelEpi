@@ -7,31 +7,40 @@ from io import BytesIO
 def carregar_dados_github(url):
     df = pd.read_excel(url)
     df['DATA_INSPECAO'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
-    # Considera data 2001-01-01 como "sem inspeção"
     df.loc[df['DATA_INSPECAO'] == pd.Timestamp('2001-01-01'), 'DATA_INSPECAO'] = pd.NaT
     return df
 
-def consolidar_inspecoes(df):
-    # Ordena por técnico + produto e data decrescente
-    df_sorted = df.sort_values(by=['IDTEL_TECNICO', 'PRODUTO_SIMILAR', 'DATA_INSPECAO'], ascending=[True, True, False], na_position='last')
-    # Mantém apenas a linha mais recente OU sem inspeção para cada técnico + produto
-    df_unique = df_sorted.drop_duplicates(subset=['IDTEL_TECNICO', 'PRODUTO_SIMILAR'], keep='first')
-    return df_unique
+def consolidar_inspecoes_sem_duplicar(df):
+    # Inspecionados - pega só a última inspeção por técnico + produto
+    com_data = df[df['DATA_INSPECAO'].notnull()].copy()
+    com_data = com_data.sort_values(by='DATA_INSPECAO', ascending=False)
+    com_data = com_data.drop_duplicates(subset=['IDTEL_TECNICO', 'PRODUTO_SIMILAR'], keep='first')
+
+    # Pendentes - pega apenas quem NÃO tem inspeção e não apareceu nos inspecionados
+    sem_data = df[df['DATA_INSPECAO'].isnull()].copy()
+    chaves_usadas = com_data[['IDTEL_TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
+    sem_data = sem_data.merge(chaves_usadas, on=['IDTEL_TECNICO', 'PRODUTO_SIMILAR'], how='left', indicator=True)
+    sem_data = sem_data[sem_data['_merge'] == 'left_only'].drop(columns=['_merge'])
+
+    # Junta os dois
+    df_final = pd.concat([com_data, sem_data], ignore_index=True)
+    return df_final
 
 def exportar_excel(dfs_dict):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         for nome, df in dfs_dict.items():
-            df.to_excel(writer, sheet_name=nome, index=False)
+            df.to_excel(writer, sheet_name=nome[:31], index=False)  # Nome da aba max 31 caracteres
     output.seek(0)
     return output
 
-# URL RAW do seu arquivo no GitHub
+# URL do GitHub (RAW)
 url_github = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 
 st.set_page_config(page_title="Dashboard EPI", layout="wide")
 st.title("📋 Dashboard de Inspeções de EPI")
 
+# Carregamento
 df = carregar_dados_github(url_github)
 
 colunas_necessarias = ['DATA_INSPECAO', 'IDTEL_TECNICO', 'PRODUTO_SIMILAR', 'GERENTE', 'COORDENADOR']
@@ -52,10 +61,10 @@ if gerente_selecionado != 'Todos':
 if coordenador_selecionado != 'Todos':
     df_filtrado = df_filtrado[df_filtrado['COORDENADOR'] == coordenador_selecionado]
 
-# Consolida: uma linha por técnico + produto
-df_consolidado = consolidar_inspecoes(df_filtrado)
+# Consolidar inspeções
+df_consolidado = consolidar_inspecoes_sem_duplicar(df_filtrado)
 
-# Separa para visualização
+# Separar
 ultimas = df_consolidado[df_consolidado['DATA_INSPECAO'].notnull()]
 nunca = df_consolidado[df_consolidado['DATA_INSPECAO'].isnull()]
 
@@ -72,7 +81,7 @@ col1.metric("Total Registros", total_registros)
 col2.metric("Inspecionados (%)", f"{pct_inspecionados:.1f}%")
 col3.metric("Pendentes (%)", f"{pct_pendentes:.1f}%")
 
-# Gráfico de pizza
+# Gráfico pizza
 fig = px.pie(
     names=["Inspecionados", "Pendentes"],
     values=[total_inspecionados, total_pendentes],
@@ -88,7 +97,7 @@ st.dataframe(ultimas)
 st.subheader("⚠️ Técnicos que Nunca Foram Inspecionados")
 st.dataframe(nunca)
 
-# Exportação Excel
+# Exportar Excel
 output_excel = exportar_excel({
     'Consolidado': df_consolidado,
     'Ultima_Inspecao': ultimas,
