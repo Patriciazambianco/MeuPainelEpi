@@ -6,28 +6,46 @@ from io import BytesIO
 st.set_page_config(page_title="Dashboard de EPI", layout="wide")
 
 @st.cache_data
-
 def carregar_dados():
     df = pd.read_excel("LISTA DE VERIFICAÇÃO EPI.xlsx", engine="openpyxl")
     df.columns = df.columns.str.strip()
+
+    st.write("🕵️‍♀️ Colunas encontradas no arquivo:", df.columns.tolist())
+
+    col_tec = [col for col in df.columns if 'TECNICO' in col.upper()]
+    col_prod = [col for col in df.columns if 'PRODUTO' in col.upper()]
+    col_data = [col for col in df.columns if 'INSPECAO' in col.upper()]
+
+    if not col_tec or not col_prod or not col_data:
+        st.error("❌ Verifique se o arquivo contém colunas de TÉCNICO, PRODUTO e INSPEÇÃO.")
+        return pd.DataFrame()
+
+    tecnico_col = col_tec[0]
+    produto_col = col_prod[0]
+    data_col = col_data[0]
 
     df.rename(columns={
         'GERENTE': 'GERENTE_IMEDIATO',
         'SITUAÇÃO CHECK LIST': 'Status_Final'
     }, inplace=True)
 
-    df['Data_Inspecao'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
+    df['Data_Inspecao'] = pd.to_datetime(df[data_col], errors='coerce')
 
-    base = df[['TECNICO', 'PRODUTO_SIMILAR']].drop_duplicates()
+    base = df[[tecnico_col, produto_col]].drop_duplicates()
 
     ultimas = (
         df.dropna(subset=['Data_Inspecao'])
         .sort_values('Data_Inspecao')
-        .groupby(['TECNICO', 'PRODUTO_SIMILAR'], as_index=False)
+        .groupby([tecnico_col, produto_col], as_index=False)
         .last()
     )
 
-    final = pd.merge(base, ultimas, on=['TECNICO', 'PRODUTO_SIMILAR'], how='left')
+    final = pd.merge(base, ultimas, on=[tecnico_col, produto_col], how='left')
+
+    final.rename(columns={
+        tecnico_col: 'TECNICO',
+        produto_col: 'PRODUTO'
+    }, inplace=True)
 
     final['Status_Final'] = final['Status_Final'].str.upper()
 
@@ -45,8 +63,7 @@ def exportar_excel(df):
 
 def plot_pie_chart(df, group_col, title_prefix):
     grouped = df.groupby(group_col)['Status_Final'].value_counts().unstack(fill_value=0)
-    if 'OK' not in grouped.columns: grouped['OK'] = 0
-    if 'PENDENTE' not in grouped.columns: grouped['PENDENTE'] = 0
+    grouped = grouped[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(grouped.columns) else grouped
 
     charts = []
     for grupo in grouped.index:
@@ -55,22 +72,24 @@ def plot_pie_chart(df, group_col, title_prefix):
             names=valores.index,
             values=valores.values,
             color=valores.index,
-            color_discrete_map={'OK':'#2a9d8f', 'PENDENTE':'#e76f51'},
+            color_discrete_map={'OK': '#2a9d8f', 'PENDENTE': '#e76f51'},
             hole=0.4,
             title=f"{title_prefix}: {grupo}"
         )
         fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(margin=dict(t=30,b=0,l=0,r=0), height=250, showlegend=False)
+        fig.update_layout(margin=dict(t=30, b=0, l=0, r=0), height=250, showlegend=False)
         charts.append(fig)
     return charts
 
 def show():
-    st.title("\U0001F4CA Dashboard de Inspeções EPI")
+    st.title("📊 Dashboard de Inspeções EPI")
 
     df = carregar_dados()
+    if df.empty:
+        return
 
     gerentes = sorted(df['GERENTE_IMEDIATO'].dropna().unique())
-    gerente_sel = st.sidebar.selectbox("\U0001F468‍\U0001F4BC Selecione o Gerente", ["Todos"] + gerentes)
+    gerente_sel = st.sidebar.selectbox("👨‍💼 Selecione o Gerente", ["Todos"] + gerentes)
 
     if gerente_sel != "Todos":
         df_gerente = df[df['GERENTE_IMEDIATO'] == gerente_sel]
@@ -78,17 +97,17 @@ def show():
         df_gerente = df.copy()
 
     coordenadores = sorted(df_gerente['COORDENADOR'].dropna().unique())
-    coord_sel = st.sidebar.multiselect("\U0001F469‍\U0001F4BC Coordenador", options=coordenadores, default=coordenadores)
+    coord_sel = st.sidebar.multiselect("👩‍💼 Coordenador", options=coordenadores, default=coordenadores)
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
-    so_vencidos = st.sidebar.checkbox("\U0001F534 Mostrar apenas vencidos > 180 dias")
+    so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido']]
 
     df_pendentes = df_filtrado[df_filtrado['Status_Final'] == 'PENDENTE']
     st.download_button(
-        label="\U0001F4E5 Baixar Pendentes (.xlsx)",
+        label="📥 Baixar Pendentes (.xlsx)",
         data=exportar_excel(df_pendentes),
         file_name="pendentes_epi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -108,8 +127,8 @@ def show():
     def color_metric(label, value, color):
         st.markdown(f"""
         <div style='
-            padding:6px; 
-            border-radius:10px; 
+            padding:8px; 
+            border-radius:8px; 
             background-color:{color}; 
             color:white; 
             text-align:center;
@@ -132,7 +151,7 @@ def show():
 
     st.markdown("---")
 
-    st.subheader("\U0001F355 Status das Inspeções por Gerente")
+    st.subheader("🍕 Status das Inspeções por Gerente")
     graficos_gerente = plot_pie_chart(df_filtrado, 'GERENTE_IMEDIATO', "Gerente")
     for i in range(0, len(graficos_gerente), 3):
         cols = st.columns(3)
@@ -141,7 +160,7 @@ def show():
 
     st.markdown("---")
 
-    st.subheader("\U0001F355 Status das Inspeções por Coordenador")
+    st.subheader("🍕 Status das Inspeções por Coordenador")
     graficos_coord = plot_pie_chart(df_filtrado, 'COORDENADOR', "Coordenador")
     for i in range(0, len(graficos_coord), 3):
         cols = st.columns(3)
@@ -150,7 +169,7 @@ def show():
 
     st.markdown("---")
 
-    st.subheader("\U0001F4CB Dados detalhados")
+    st.subheader("📋 Dados detalhados")
     st.dataframe(df_filtrado.reset_index(drop=True), height=400)
 
 if __name__ == "__main__":
