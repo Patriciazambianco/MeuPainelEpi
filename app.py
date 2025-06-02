@@ -7,22 +7,16 @@ from io import BytesIO
 def carregar_dados_github(url):
     df = pd.read_excel(url)
     df['DATA_INSPECAO'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
-    # Ajusta a data 2001-01-01 para NaT (considera como nunca inspecionado)
+    # Considera data 2001-01-01 como "sem inspeção"
     df.loc[df['DATA_INSPECAO'] == pd.Timestamp('2001-01-01'), 'DATA_INSPECAO'] = pd.NaT
     return df
 
-def gerar_ultima_inspecao(df):
-    # Pega só os registros com data de inspeção
-    df_inspec = df[df['DATA_INSPECAO'].notnull()].copy()
-    # Ordena do mais recente para o mais antigo
-    df_inspec.sort_values(by=['IDTEL_TECNICO', 'PRODUTO_SIMILAR', 'DATA_INSPECAO'], ascending=[True, True, False], inplace=True)
-    # Mantém só a última inspeção por técnico + produto (drop duplicados mantendo o mais recente)
-    df_ult = df_inspec.drop_duplicates(subset=['IDTEL_TECNICO', 'PRODUTO_SIMILAR'], keep='first')
-    return df_ult
-
-def gerar_nunca_inspecionados(df):
-    # Registros que não tem data de inspeção (NaT)
-    return df[df['DATA_INSPECAO'].isnull()]
+def consolidar_inspecoes(df):
+    # Ordena por técnico + produto e data decrescente
+    df_sorted = df.sort_values(by=['IDTEL_TECNICO', 'PRODUTO_SIMILAR', 'DATA_INSPECAO'], ascending=[True, True, False], na_position='last')
+    # Mantém apenas a linha mais recente OU sem inspeção para cada técnico + produto
+    df_unique = df_sorted.drop_duplicates(subset=['IDTEL_TECNICO', 'PRODUTO_SIMILAR'], keep='first')
+    return df_unique
 
 def exportar_excel(dfs_dict):
     output = BytesIO()
@@ -45,7 +39,7 @@ if not all(col in df.columns for col in colunas_necessarias):
     st.error("Arquivo enviado não possui as colunas necessárias.")
     st.stop()
 
-# Filtragem para dropdown
+# Filtros
 gerentes = ['Todos'] + sorted(df['GERENTE'].dropna().unique())
 coordenadores = ['Todos'] + sorted(df['COORDENADOR'].dropna().unique())
 
@@ -58,10 +52,15 @@ if gerente_selecionado != 'Todos':
 if coordenador_selecionado != 'Todos':
     df_filtrado = df_filtrado[df_filtrado['COORDENADOR'] == coordenador_selecionado]
 
-ultimas = gerar_ultima_inspecao(df_filtrado)
-nunca = gerar_nunca_inspecionados(df_filtrado)
+# Consolida: uma linha por técnico + produto
+df_consolidado = consolidar_inspecoes(df_filtrado)
 
-total_registros = len(df_filtrado)
+# Separa para visualização
+ultimas = df_consolidado[df_consolidado['DATA_INSPECAO'].notnull()]
+nunca = df_consolidado[df_consolidado['DATA_INSPECAO'].isnull()]
+
+# Métricas
+total_registros = len(df_consolidado)
 total_inspecionados = len(ultimas)
 total_pendentes = len(nunca)
 pct_inspecionados = (total_inspecionados / total_registros * 100) if total_registros else 0
@@ -73,7 +72,7 @@ col1.metric("Total Registros", total_registros)
 col2.metric("Inspecionados (%)", f"{pct_inspecionados:.1f}%")
 col3.metric("Pendentes (%)", f"{pct_pendentes:.1f}%")
 
-# Gráfico pizza - Inspecionados x Pendentes
+# Gráfico de pizza
 fig = px.pie(
     names=["Inspecionados", "Pendentes"],
     values=[total_inspecionados, total_pendentes],
@@ -82,13 +81,19 @@ fig = px.pie(
 )
 st.plotly_chart(fig, use_container_width=True)
 
+# Tabelas
 st.subheader("✅ Última Inspeção por Técnico + Produto")
 st.dataframe(ultimas)
 
 st.subheader("⚠️ Técnicos que Nunca Foram Inspecionados")
 st.dataframe(nunca)
 
-output_excel = exportar_excel({'Ultima_Inspecao': ultimas, 'Nunca_Inspecionados': nunca})
+# Exportação Excel
+output_excel = exportar_excel({
+    'Consolidado': df_consolidado,
+    'Ultima_Inspecao': ultimas,
+    'Nunca_Inspecionados': nunca
+})
 
 st.download_button(
     label="⬇️ Baixar Excel com Resultados",
