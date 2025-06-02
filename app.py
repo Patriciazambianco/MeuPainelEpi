@@ -117,24 +117,14 @@ def show():
     pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
     pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
-    
-    def color_metric(label, value, color, unit="%"):
-        st.markdown(f"""
-        <div style='
-            padding:8px; 
-            border-radius:10px; 
-            background-color:{color}; 
-            color:white; 
-            text-align:center;
-            font-family:sans-serif;
-            font-size:13px;
-            box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
-            '>
-            <h5 style='margin-bottom:4px'>{label}</h5>
-            <h3 style='margin-top:0'>{value:.1f}{unit}</h3>
-        </div>
-        """, unsafe_allow_html=True)
+    # Calculando indicadores técnicos
+    tecnicos_com_inspecao = df_filtrado[df_filtrado['Data_Inspecao'].notnull()]['TECNICO'].nunique()
+    tecnicos_sem_inspecao = df_filtrado[df_filtrado['Data_Inspecao'].isnull()]['TECNICO'].nunique()
+    pct_tecnicos_inspecionaram = tecnicos_com_inspecao / (tecnicos_com_inspecao + tecnicos_sem_inspecao) * 100 if (tecnicos_com_inspecao + tecnicos_sem_inspecao) > 0 else 0
+    pct_tecnicos_nao_inspecionaram = 100 - pct_tecnicos_inspecionaram
 
+    # Criando os cards
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         color_metric("% OK", pct_ok, "#2a9d8f")
     with col2:
