@@ -81,6 +81,23 @@ def plot_pie_chart(df, group_col, title_prefix):
         charts.append(fig)
     return charts
 
+def color_metric(label, value, color, unit="%"):
+    st.markdown(f"""
+    <div style='
+        padding:8px; 
+        border-radius:10px; 
+        background-color:{color}; 
+        color:white; 
+        text-align:center;
+        font-family:sans-serif;
+        font-size:13px;
+        box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+        '>
+        <h5 style='margin-bottom:4px'>{label}</h5>
+        <h3 style='margin-top:0'>{value:.1f}{unit}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
 def show():
     st.title("📊 Dashboard de Inspeções EPI")
 
@@ -117,22 +134,23 @@ def show():
     pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
     pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
 
-    # Calculando indicadores técnicos
+    num_tecnicos = df_filtrado['TECNICO'].nunique()
     tecnicos_com_inspecao = df_filtrado[df_filtrado['Data_Inspecao'].notnull()]['TECNICO'].nunique()
-    tecnicos_sem_inspecao = df_filtrado[df_filtrado['Data_Inspecao'].isnull()]['TECNICO'].nunique()
-    pct_tecnicos_inspecionaram = tecnicos_com_inspecao / (tecnicos_com_inspecao + tecnicos_sem_inspecao) * 100 if (tecnicos_com_inspecao + tecnicos_sem_inspecao) > 0 else 0
-    pct_tecnicos_nao_inspecionaram = 100 - pct_tecnicos_inspecionaram
+    tecnicos_sem_inspecao = num_tecnicos - tecnicos_com_inspecao
 
-    # Criando os cards
+    pct_tecnicos_com_inspecao = tecnicos_com_inspecao / num_tecnicos * 100 if num_tecnicos > 0 else 0
+    pct_tecnicos_sem_inspecao = 100 - pct_tecnicos_com_inspecao
+
     col1, col2, col3, col4, col5, col6 = st.columns(6)
+
     with col1:
         color_metric("% OK", pct_ok, "#2a9d8f")
     with col2:
         color_metric("% Pendentes", pct_pendentes, "#e76f51")
     with col3:
-        color_metric("% Técnicos com Inspeção", pct_tecnicos_inspecionaram, "#f4a261")
+        color_metric("% Técnicos com Inspeção", pct_tecnicos_com_inspecao, "#f4a261")
     with col4:
-        color_metric("% Técnicos sem Inspeção", pct_tecnicos_nao_inspecionaram, "#e76f51")
+        color_metric("% Técnicos sem Inspeção", pct_tecnicos_sem_inspecao, "#e76f51")
     with col5:
         color_metric("Qtd com inspeção", tecnicos_com_inspecao, "#264653", unit="")
     with col6:
