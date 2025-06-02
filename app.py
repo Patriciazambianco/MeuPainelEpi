@@ -101,11 +101,6 @@ def show():
 
     df_filtrado = df_gerente[df_gerente['COORDENADOR'].isin(coord_sel)]
 
-    # Filtro por nome do técnico (input de texto)
-    nome_tec = st.sidebar.text_input("🔎 Buscar por nome do Técnico").strip()
-    if nome_tec:
-        df_filtrado = df_filtrado[df_filtrado['TECNICO'].astype(str).str.contains(nome_tec, case=False, na=False)]
-
     so_vencidos = st.sidebar.checkbox("🔴 Mostrar apenas vencidos > 180 dias")
     if so_vencidos:
         df_filtrado = df_filtrado[df_filtrado['Vencido']]
@@ -118,8 +113,33 @@ def show():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Remove colunas duplicadas antes de mostrar o dataframe para evitar erro
-    df_filtrado = df_filtrado.loc[:, ~df_filtrado.columns.duplicated()]
+    total = df_filtrado.shape[0] if df_filtrado.shape[0] > 0 else 1
+    pct_pendentes = (df_filtrado['STATUS CHECK LIST'] == 'PENDENTE').sum() / total * 100
+    pct_ok = (df_filtrado['STATUS CHECK LIST'] == 'OK').sum() / total * 100
+
+    # Só os dois cards de OK e Pendentes
+    col1, col2 = st.columns(2)
+    def color_metric(label, value, color, unit="%"):
+        st.markdown(f"""
+        <div style='
+            padding:8px; 
+            border-radius:10px; 
+            background-color:{color}; 
+            color:white; 
+            text-align:center;
+            font-family:sans-serif;
+            font-size:13px;
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+            '>
+            <h5 style='margin-bottom:4px'>{label}</h5>
+            <h3 style='margin-top:0'>{value:.1f}{unit}</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col1:
+        color_metric("% OK", pct_ok, "#2a9d8f")
+    with col2:
+        color_metric("% Pendentes", pct_pendentes, "#e76f51")
 
     st.markdown("---")
 
