@@ -62,7 +62,7 @@ def exportar_excel(df):
     return buffer.getvalue()
 
 def plot_pie_chart(df, group_col, title_prefix):
-    grouped = df.groupby(group_col)['Status_Final'].value_counts().unstack(fill_value=0)
+    grouped = df.groupby(group_col)['STATUS CHECK LIST'].value_counts().unstack(fill_value=0)
     grouped = grouped[['OK', 'PENDENTE']] if set(['OK', 'PENDENTE']).issubset(grouped.columns) else grouped
 
     charts = []
