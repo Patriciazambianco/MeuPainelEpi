@@ -46,20 +46,22 @@ def carregar_dados():
         return pd.DataFrame()
     file_bytes = io.BytesIO(response.content)
     df = pd.read_excel(file_bytes, engine="openpyxl")
+    # Padroniza nomes das colunas
+    df.columns = df.columns.str.strip().str.upper().str.replace(" ", "_").str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
     return df
 
 # --- Função para filtrar última inspeção por TÉCNICO ---
 def filtrar_por_tecnico(df):
-    df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
-    com_data = df[df["DATA_INSPECAO"].notna()]
-    sem_data = df[df["DATA_INSPECAO"].isna()]
-    ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
-    sem_data = sem_data[~sem_data["TÉCNICO"].isin(ultimas["TÉCNICO"])]
+    df["DATA_DA_INSPECAO"] = pd.to_datetime(df["DATA_DA_INSPECAO"], errors="coerce")
+    com_data = df[df["DATA_DA_INSPECAO"].notna()]
+    sem_data = df[df["DATA_DA_INSPECAO"].isna()]
+    ultimas = com_data.sort_values("DATA_DA_INSPECAO").drop_duplicates(subset=["TECNICO"], keep="last")
+    sem_data = sem_data[~sem_data["TECNICO"].isin(ultimas["TECNICO"])]
     return pd.concat([ultimas, sem_data], ignore_index=True)
 
 # --- Função para permitir download apenas das pendências ---
 def gerar_download_pendencias(df):
-    pendentes = df[df["DATA_INSPECAO"].isna()]
+    pendentes = df[df["DATA_DA_INSPECAO"].isna()]
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         pendentes.to_excel(writer, index=False, sheet_name="Pendencias")
@@ -93,7 +95,7 @@ if coordenador_sel:
 
 # KPIs
 total = len(df_filtrado)
-pendentes = df_filtrado["DATA_INSPECAO"].isna().sum()
+pendentes = df_filtrado["DATA_DA_INSPECAO"].isna().sum()
 ok = total - pendentes
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
