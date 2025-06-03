@@ -83,6 +83,7 @@ st.markdown("### Indicadores")
 st.metric("Inspeções OK", ok)
 st.metric("Pendentes", pending)
 st.metric("% OK", f"{pct_ok}%")
+st.metric("% Pendentes", f"{pct_pendente}%")
 
 # Gráfico pizza
 fig = px.pie(names=["OK", "Pendente"], values=[ok, pending], title="Status das Inspeções")
