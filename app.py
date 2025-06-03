@@ -3,21 +3,18 @@ import streamlit as st
 import plotly.express as px
 from io import BytesIO
 
-# Carregar o arquivo local enviado
 @st.cache_data
-def carregar_dados_local(path):
-    df = pd.read_excel(path, engine="openpyxl")
+def carregar_dados_github(url):
+    df = pd.read_excel(url, engine='openpyxl')
     df['DATA_INSPECAO'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
     df.loc[df['DATA_INSPECAO'] == pd.Timestamp('2001-01-01'), 'DATA_INSPECAO'] = pd.NaT
     return df
 
-# Última inspeção por técnico + produto (descartando duplicados)
 def gerar_ultima_inspecao(df):
     df_ok = df[df['DATA_INSPECAO'].notnull()]
     df_ok = df_ok.sort_values(by='DATA_INSPECAO', ascending=False)
     return df_ok.drop_duplicates(subset=['IDTEL_TECNICO', 'PRODUTO_SIMILAR'], keep='first')
 
-# Nunca inspecionados (DATA_INSPECAO em branco ou NaT)
 def gerar_nunca_inspecionados(df):
     df_nunca = df[df['DATA_INSPECAO'].isnull()]
     return df_nunca.drop_duplicates(subset=['IDTEL_TECNICO', 'PRODUTO_SIMILAR'], keep='first')
@@ -30,12 +27,11 @@ def exportar_excel(dfs_dict):
     output.seek(0)
     return output
 
-# Interface
 st.set_page_config(page_title="Dashboard EPI", layout="wide")
 st.title("📋 Dashboard de Inspeções de EPI")
 
-# Carrega do arquivo local (substituir para GitHub se quiser depois)
-df = carregar_dados_local("/mnt/data/LISTA DE VERIFICAÇÃO EPI.xlsx")
+url_github = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
+df = carregar_dados_github(url_github)
 
 colunas_necessarias = ['DATA_INSPECAO', 'IDTEL_TECNICO', 'PRODUTO_SIMILAR', 'GERENTE', 'COORDENADOR']
 if not all(col in df.columns for col in colunas_necessarias):
@@ -83,7 +79,6 @@ st.subheader("⚠️ Técnicos com Produtos Nunca Inspecionados")
 st.dataframe(nunca)
 
 output_excel = exportar_excel({'Ultima_Inspecao': ultimas, 'Nunca_Inspecionados': nunca})
-
 st.download_button(
     label="⬇️ Baixar Excel com Resultados",
     data=output_excel,
