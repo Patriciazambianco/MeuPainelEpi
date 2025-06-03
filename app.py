@@ -6,6 +6,22 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
+# Fundo degradê azul suave + ajustes de cor texto
+background_css = """
+<style>
+    .stApp {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+    }
+    /* Ajusta a cor do texto das tabelas para ficar visível no fundo escuro */
+    .stDataFrame div.row_widget.stDataFrameWidget div.cell, 
+    .stDataFrame div.row_widget.stDataFrameWidget div.cell > div {
+        color: black !important;
+    }
+</style>
+"""
+st.markdown(background_css, unsafe_allow_html=True)
+
 # --- Função para carregar dados direto do GitHub ---
 @st.cache_data
 def carregar_dados():
@@ -152,3 +168,4 @@ st.markdown("### Dados Tratados")
 st.dataframe(df_filtrado, use_container_width=True)
 
 st.markdown(gerar_download_excel(df_filtrado), unsafe_allow_html=True)
+
