@@ -17,24 +17,19 @@ def carregar_dados():
 def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-    # Técnicos que já fizeram alguma inspeção (independente do produto)
     com_data = df[df["DATA_INSPECAO"].notna()]
 
-    # Pega a última inspeção por técnico (independente do produto)
     ultimas_por_tecnico = (
         com_data
         .sort_values("DATA_INSPECAO")
         .drop_duplicates(subset=["TÉCNICO"], keep="last")
     )
 
-    # Técnicos que nunca fizeram nenhuma inspeção
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
 
-    # Pega só uma linha por técnico pendente (para não duplicar)
     sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
 
-    # Junta os técnicos com última inspeção + técnicos pendentes
     resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
 
     return resultado
@@ -46,11 +41,48 @@ def gerar_download_excel(df):
         df.to_excel(writer, index=False, sheet_name="InspecoesTratadas")
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_tratadas.xlsx">📥 Baixar Excel Tratado</a>'
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_tratadas.xlsx" style="font-size:18px; color:#fff; background-color:#007acc; padding:10px 15px; border-radius:5px; text-decoration:none;">📥 Baixar Excel Tratado</a>'
     return href
 
+# --- Estilo CSS customizado para KPIs coloridos ---
+kpi_css = """
+<style>
+.kpi-container {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.kpi-box {
+    background-color: #007acc;
+    color: white;
+    border-radius: 10px;
+    padding: 20px 30px;
+    flex: 1;
+    text-align: center;
+    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.kpi-box.pending {
+    background-color: #f39c12;
+}
+.kpi-box.percent {
+    background-color: #27ae60;
+}
+.kpi-title {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+.kpi-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+</style>
+"""
+
 # --- Início do app ---
-st.title("Inspeções EPI")
+st.title("🦺 Painel de Inspeções EPI")
 
 # Carrega e trata os dados
 df_raw = carregar_dados()
@@ -77,16 +109,42 @@ total = len(df_filtrado)
 pending = df_filtrado["DATA_INSPECAO"].isna().sum()
 ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
-pct_pendente = 100 - pct_ok
+pct_pendente = round(100 - pct_ok, 1)
 
-st.markdown("### Indicadores")
-st.metric("Inspeções OK", ok)
-st.metric("Pendentes", pending)
-st.metric("% OK", f"{pct_ok}%")
-st.metric("% Pendentes", f"{pct_pendente}%")
+# Aplica o CSS e monta os KPIs coloridos via HTML
+st.markdown(kpi_css, unsafe_allow_html=True)
 
-# Gráfico pizza
-fig = px.pie(names=["OK", "Pendente"], values=[ok, pending], title="Status das Inspeções")
+kpis_html = f"""
+<div class="kpi-container">
+    <div class="kpi-box percent">
+        <div class="kpi-title">Inspeções OK</div>
+        <div class="kpi-value">{ok}</div>
+    </div>
+    <div class="kpi-box pending">
+        <div class="kpi-title">Pendentes</div>
+        <div class="kpi-value">{pending}</div>
+    </div>
+    <div class="kpi-box percent">
+        <div class="kpi-title">% OK</div>
+        <div class="kpi-value">{pct_ok}%</div>
+    </div>
+    <div class="kpi-box pending">
+        <div class="kpi-title">% Pendentes</div>
+        <div class="kpi-value">{pct_pendente}%</div>
+    </div>
+</div>
+"""
+
+st.markdown(kpis_html, unsafe_allow_html=True)
+
+# Gráfico pizza com cores vibrantes
+fig = px.pie(
+    names=["OK", "Pendentes"],
+    values=[ok, pending],
+    title="Status das Inspeções",
+    color=["OK", "Pendentes"],
+    color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
+)
 st.plotly_chart(fig, use_container_width=True)
 
 # Tabela e download
