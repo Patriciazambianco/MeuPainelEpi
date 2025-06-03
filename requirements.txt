@@ -3,4 +3,4 @@ streamlit>=1.30
 openpyxl>=3.1
 plotly>=5.0
 xlsxwriter
-
+pip install streamlit-authenticator
