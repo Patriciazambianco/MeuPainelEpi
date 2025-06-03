@@ -8,11 +8,11 @@ import streamlit_authenticator as stauth
 st.set_page_config(page_title="Inspeções EPI", layout="wide", initial_sidebar_state="collapsed")
 
 # --- Se o nome for "pati", pula o login ---
-pati_auto_login = True
+Patricia Zambianco_auto_login = True
 
 if pati_auto_login:
-    username = "pati"
-    name = "Pati"
+    username = "Patricia Zambianco"
+    name = "Patricia Zambianco"
     authentication_status = True
 else:
     # --- Usuários e senhas (só os outros fazem login) ---
