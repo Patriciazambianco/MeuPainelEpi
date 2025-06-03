@@ -13,7 +13,7 @@ st.markdown(
     .stApp {
         background-color: #d0f0c0;
     }
-    /* Botão de download piscando */
+    /* Botão de download piscando - texto branco e fundo azul forte */
     @keyframes blink {
       0% {opacity: 1;}
       50% {opacity: 0.4;}
@@ -21,28 +21,27 @@ st.markdown(
     }
     .download-btn {
         font-size:18px; 
-        color:#fff; 
-        background-color:#007acc; 
+        color:#ffffff !important; 
+        background-color:#005a9c; 
         padding:10px 15px; 
         border-radius:5px; 
-        text-decoration:none;
+        text-decoration:none !important;
         animation: blink 1.5s infinite;
         display: inline-block;
         margin-bottom: 20px;
+        font-weight: 700;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# --- Função para carregar dados direto do GitHub ---
 @st.cache_data
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
     return df
 
-# --- Função para filtrar última inspeção por TÉCNICO (independente do produto) ---
 def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
@@ -63,7 +62,6 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
 
     return resultado
 
-# --- Função para permitir download do Excel tratado ---
 def gerar_download_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -73,7 +71,6 @@ def gerar_download_excel(df):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-# --- Estilo CSS customizado para KPIs coloridos ---
 kpi_css = """
 <style>
 .kpi-container {
@@ -110,20 +107,14 @@ kpi_css = """
 </style>
 """
 
-# --- Início do app ---
 st.title("🦺 Painel de Inspeções EPI")
 
-# Carrega e trata os dados
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
-# Filtros dependentes
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
-
-# Seleção do gerente (single select pra facilitar a lógica)
 gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
 
-# Filtra coordenadores conforme gerente escolhido
 if gerente_sel != "-- Todos --":
     df_filtrado_ger = df_tratado[df_tratado["GERENTE"] == gerente_sel]
 else:
@@ -132,25 +123,20 @@ else:
 coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
 coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
 
-# Aplica filtros finais
 df_filtrado = df_filtrado_ger.copy()
 if coordenador_sel:
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
 
-# Foca só nos pendentes para download e tabela
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
 
-# Mostra botão download piscando lá no topo
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
-# KPIs (com base no filtro final)
 total = len(df_filtrado)
 pending = df_filtrado["DATA_INSPECAO"].isna().sum()
 ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
 
-# Aplica o CSS e monta os KPIs coloridos via HTML
 st.markdown(kpi_css, unsafe_allow_html=True)
 
 kpis_html = f"""
@@ -176,9 +162,7 @@ kpis_html = f"""
 
 st.markdown(kpis_html, unsafe_allow_html=True)
 
-# Gráfico de barras: status por coordenador (com percentual por gerente mantido nos KPIs)
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
-    # Calcula status por coordenador
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
         lambda x: pd.Series({
             "Pendentes": x["DATA_INSPECAO"].isna().sum(),
@@ -186,25 +170,30 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
         })
     ).reset_index()
 
-    # Prepara dados para gráfico
-    df_melt = df_status_coord.melt(id_vars="COORDENADOR", value_vars=["OK", "Pendentes"], 
-                                  var_name="Status", value_name="Quantidade")
+    # Calcular porcentagem para cada coordenador
+    df_status_coord["Total"] = df_status_coord["OK"] + df_status_coord["Pendentes"]
+    df_status_coord["% OK"] = (df_status_coord["OK"] / df_status_coord["Total"] * 100).round(1)
+    df_status_coord["% Pendentes"] = (df_status_coord["Pendentes"] / df_status_coord["Total"] * 100).round(1)
+
+    # Preparar dados para gráfico de barras com % OK e % Pendentes
+    df_melt = df_status_coord.melt(id_vars="COORDENADOR", value_vars=["% OK", "% Pendentes"],
+                                  var_name="Status", value_name="Percentual")
 
     fig = px.bar(
         df_melt,
         x="COORDENADOR",
-        y="Quantidade",
+        y="Percentual",
         color="Status",
-        color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"},
-        labels={"Quantidade": "Quantidade", "Status": "Status", "COORDENADOR": "Coordenador"},
-        title="Status das Inspeções por Coordenador",
-        text="Quantidade"
+        color_discrete_map={"% OK": "#27ae60", "% Pendentes": "#f39c12"},
+        labels={"Percentual": "% das Inspeções", "Status": "Status", "COORDENADOR": "Coordenador"},
+        title="Percentual das Inspeções por Coordenador",
+        text="Percentual"
     )
-    fig.update_layout(barmode="stack", xaxis_tickangle=-45)
+    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0,100]))
+    fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
-
-# Tabela com pendentes apenas (com scroll e largura full)
+    
 st.markdown("### Pendentes")
 st.dataframe(df_pendentes, use_container_width=True)
