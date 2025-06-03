@@ -3,124 +3,77 @@ import pandas as pd
 import io
 import base64
 import plotly.express as px
+import requests
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# --- CSS Customizado ---
-custom_css = """
-<style>
-    .stApp {
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-        color: white;
+# --- Estilo CSS ---
+st.markdown("""
+    <style>
+    body {
+        background-color: #f0f2f6;
     }
-
-    .kpi-container {
-        display: flex;
-        gap: 1.5rem;
-        margin-bottom: 2rem;
-    }
-
-    .kpi-box {
-        background-color: #007acc;
-        color: white;
+    .css-18e3th9 {
+        background-color: #ffffff;
         border-radius: 10px;
-        padding: 20px 30px;
-        flex: 1;
-        text-align: center;
-        box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        padding: 10px;
     }
-
-    .kpi-box.pending {
-        background-color: #f39c12;
-    }
-
-    .kpi-box.percent {
-        background-color: #27ae60;
-    }
-
-    .kpi-title {
-        font-size: 1.1rem;
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-    }
-
-    .kpi-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        line-height: 1;
-    }
-
-    .blinking-button {
-        font-size: 16px;
-        color: white !important;
-        background-color: #e74c3c;
-        padding: 10px 20px;
+    .download-btn {
+        font-weight: bold;
+        color: white;
+        background-color: #ff4b4b;
+        padding: 10px;
         border-radius: 8px;
         text-decoration: none;
         animation: blink 1s infinite;
-        font-weight: bold;
     }
-
     @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
+      0% {opacity: 1;}
+      50% {opacity: 0.5;}
+      100% {opacity: 1;}
     }
+    </style>
+""", unsafe_allow_html=True)
 
-    .download-top {
-        display: flex;
-        justify-content: flex-end;
-        margin-top: -40px;
-        margin-bottom: 20px;
-    }
-
-    .stDataFrame div.row_widget.stDataFrameWidget div.cell, 
-    .stDataFrame div.row_widget.stDataFrameWidget div.cell > div {
-        color: black !important;
-    }
-</style>
-"""
-st.markdown(custom_css, unsafe_allow_html=True)
-
-# --- Carregamento de dados ---
+# --- Função para carregar dados direto do GitHub ---
 @st.cache_data
+
 def carregar_dados():
-    url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%83O%20EPI.xlsx"
-    df = pd.read_excel(url, engine="openpyxl")
+    url = "https://github.com/Patriciazambianco/MeuPainelEpi/raw/main/LISTA%20DE%20VERIFICA%C3%83O%20EPI.xlsx"
+    response = requests.get(url)
+    if response.status_code != 200:
+        st.error("Erro ao carregar o arquivo do GitHub.")
+        return pd.DataFrame()
+    file_bytes = io.BytesIO(response.content)
+    df = pd.read_excel(file_bytes, engine="openpyxl")
     return df
 
-def filtrar_ultimas_inspecoes_por_tecnico(df):
+# --- Função para filtrar última inspeção por TÉCNICO ---
+def filtrar_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
+    sem_data = df[df["DATA_INSPECAO"].isna()]
     ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
-    tecnicos_com_inspecao = ultimas["TÉCNICO"].unique()
-    sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)].drop_duplicates(subset=["TÉCNICO"])
+    sem_data = sem_data[~sem_data["TÉCNICO"].isin(ultimas["TÉCNICO"])]
     return pd.concat([ultimas, sem_data], ignore_index=True)
 
-def gerar_download_pendencias_excel(df):
-    pendencias = df[df["DATA_INSPECAO"].isna()]
+# --- Função para permitir download apenas das pendências ---
+def gerar_download_pendencias(df):
+    pendentes = df[df["DATA_INSPECAO"].isna()]
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        pendencias.to_excel(writer, index=False, sheet_name="Pendencias")
+        pendentes.to_excel(writer, index=False, sheet_name="Pendencias")
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
-    href = f'''
-    <div class="download-top">
-        <a href="data:application/octet-stream;base64,{b64}" 
-           download="pendencias_inspecao.xlsx" 
-           class="blinking-button">📥 Baixar Pendências (Excel)</a>
-    </div>
-    '''
+    href = f'<a class="download-btn" href="data:application/octet-stream;base64,{b64}" download="pendencias.xlsx">📥 Baixar Pendências</a>'
     return href
 
-# --- INÍCIO ---
-st.title("🦺 Painel de Inspeções EPI")
+# --- Início do app ---
+st.title("📋 Painel de Inspeções EPI")
 
+# Carrega e trata os dados
 df_raw = carregar_dados()
-df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
-
-# Botão de download piscante
-st.markdown(gerar_download_pendencias_excel(df_tratado), unsafe_allow_html=True)
+df_tratado = filtrar_por_tecnico(df_raw)
 
 # Filtros
 col1, col2 = st.columns(2)
@@ -128,9 +81,9 @@ gerentes = df_tratado["GERENTE"].dropna().unique()
 coordenadores = df_tratado["COORDENADOR"].dropna().unique()
 
 with col1:
-    gerente_sel = st.multiselect("Filtrar por Gerente", sorted(gerentes))
+    gerente_sel = st.multiselect("👔 Filtrar por Gerente", sorted(gerentes))
 with col2:
-    coordenador_sel = st.multiselect("Filtrar por Coordenador", sorted(coordenadores))
+    coordenador_sel = st.multiselect("🧭 Filtrar por Coordenador", sorted(coordenadores))
 
 df_filtrado = df_tratado.copy()
 if gerente_sel:
@@ -140,79 +93,33 @@ if coordenador_sel:
 
 # KPIs
 total = len(df_filtrado)
-pending = df_filtrado["DATA_INSPECAO"].isna().sum()
-ok = total - pending
+pendentes = df_filtrado["DATA_INSPECAO"].isna().sum()
+ok = total - pendentes
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
 
-kpis_html = f"""
-<div class="kpi-container">
-    <div class="kpi-box percent">
-        <div class="kpi-title">Inspeções OK</div>
-        <div class="kpi-value">{ok}</div>
-    </div>
-    <div class="kpi-box pending">
-        <div class="kpi-title">Pendentes</div>
-        <div class="kpi-value">{pending}</div>
-    </div>
-    <div class="kpi-box percent">
-        <div class="kpi-title">% OK</div>
-        <div class="kpi-value">{pct_ok}%</div>
-    </div>
-    <div class="kpi-box pending">
-        <div class="kpi-title">% Pendentes</div>
-        <div class="kpi-value">{pct_pendente}%</div>
-    </div>
-</div>
-"""
-st.markdown(kpis_html, unsafe_allow_html=True)
+st.markdown("""
+### 🌟 Indicadores Gerais
+""")
+col3, col4, col5 = st.columns(3)
+col3.metric("✅ Inspeções OK", ok)
+col4.metric("❌ Pendentes", pendentes)
+col5.metric("📊 % OK / Pendentes", f"{pct_ok}% / {pct_pendente}%")
 
-# Gráfico geral
-fig = px.pie(
-    names=["OK", "Pendentes"],
-    values=[ok, pending],
-    title="Status Geral das Inspeções",
-    color=["OK", "Pendentes"],
-    color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
-)
-st.plotly_chart(fig, use_container_width=True)
+# Botão de download
+st.markdown(gerar_download_pendencias(df_filtrado), unsafe_allow_html=True)
 
-# Gráficos por Gerente
-st.markdown("### 📊 Status por Gerente")
-if "GERENTE" in df_filtrado.columns:
-    gerentes_grupo = df_filtrado.groupby("GERENTE")["DATA_INSPECAO"].apply(lambda x: pd.Series({
-        "OK": x.notna().sum(),
-        "Pendentes": x.isna().sum()
-    })).unstack().fillna(0)
+# Gráficos por gerente e coordenador
+if not df_filtrado.empty:
+    with st.expander("📈 Gráficos por Gerente e Coordenador", expanded=True):
+        # Gráfico por GERENTE
+        fig1 = px.pie(df_filtrado, names="GERENTE", title="Distribuição por Gerente", hole=0.4)
+        # Gráfico por COORDENADOR
+        fig2 = px.pie(df_filtrado, names="COORDENADOR", title="Distribuição por Coordenador", hole=0.4)
+        col1, col2 = st.columns(2)
+        col1.plotly_chart(fig1, use_container_width=True)
+        col2.plotly_chart(fig2, use_container_width=True)
 
-    for gerente, row in gerentes_grupo.iterrows():
-        fig_gerente = px.pie(
-            names=["OK", "Pendentes"],
-            values=[row["OK"], row["Pendentes"]],
-            title=f"Gerente: {gerente}",
-            color=["OK", "Pendentes"],
-            color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
-        )
-        st.plotly_chart(fig_gerente, use_container_width=True)
-
-# Gráficos por Coordenador
-st.markdown("### 📊 Status por Coordenador")
-if "COORDENADOR" in df_filtrado.columns:
-    coord_grupo = df_filtrado.groupby("COORDENADOR")["DATA_INSPECAO"].apply(lambda x: pd.Series({
-        "OK": x.notna().sum(),
-        "Pendentes": x.isna().sum()
-    })).unstack().fillna(0)
-
-    for coordenador, row in coord_grupo.iterrows():
-        fig_coord = px.pie(
-            names=["OK", "Pendentes"],
-            values=[row["OK"], row["Pendentes"]],
-            title=f"Coordenador: {coordenador}",
-            color=["OK", "Pendentes"],
-            color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
-        )
-        st.plotly_chart(fig_coord, use_container_width=True)
-
-# Tabela
-st.markdown("### 🔍 Dados Tratados")
+# Tabela com os dados tratados
+st.markdown("### 🧾 Dados Tratados")
 st.dataframe(df_filtrado, use_container_width=True)
