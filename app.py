@@ -1,226 +1,161 @@
 import streamlit as st
-import streamlit_authenticator as stauth
 import pandas as pd
 import io
 import base64
 import plotly.express as px
-import json
-import os
-import hashlib
+import streamlit_authenticator as stauth
 
-st.set_page_config(page_title="Inspeções EPI", layout="wide")
+st.set_page_config(page_title="Inspeções EPI", layout="wide", initial_sidebar_state="collapsed")
 
-USUARIOS_JSON = "usuarios.json"
+# --- Se o nome for "pati", pula o login ---
+pati_auto_login = True
 
-def hash_senha(senha):
-    return hashlib.sha256(senha.encode()).hexdigest()
-
-def verificar_senha(senha, hash_salvo):
-    return hash_senha(senha) == hash_salvo
-
-def carregar_usuarios():
-    if os.path.exists(USUARIOS_JSON):
-        with open(USUARIOS_JSON, "r") as f:
-            return json.load(f)
-    else:
-        return {
-            "pati": hash_senha("minha_senha123")
+if pati_auto_login:
+    username = "pati"
+    name = "Pati"
+    authentication_status = True
+else:
+    # --- Usuários e senhas (só os outros fazem login) ---
+    users = {
+        "usernames": {
+            "coordenador": {
+                "name": "Coordenador",
+                "password": stauth.Hasher(['senhaCoord456']).generate()[0]
+            },
         }
+    }
 
-def salvar_usuarios(usuarios):
-    with open(USUARIOS_JSON, "w") as f:
-        json.dump(usuarios, f)
-
-usuarios = carregar_usuarios()
-
-if 'modo' not in st.session_state:
-    st.session_state['modo'] = 'login'
-if 'usuario_logado' not in st.session_state:
-    st.session_state['usuario_logado'] = None
-
-@st.cache_data
-def carregar_dados():
-    url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-    df = pd.read_excel(url, engine="openpyxl")
-    return df
-
-def filtrar_ultimas_inspecoes_por_tecnico(df):
-    df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
-    com_data = df[df["DATA_INSPECAO"].notna()]
-    ultimas_por_tecnico = (
-        com_data
-        .sort_values("DATA_INSPECAO")
-        .drop_duplicates(subset=["TÉCNICO"], keep="last")
+    authenticator = stauth.Authenticate(
+        users['usernames'],
+        "cookie_meupainelepi",
+        "chave_secreta_meupainel",
+        cookie_expiry_days=1
     )
-    tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
-    sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
-    sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
-    resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
-    return resultado
 
-def gerar_download_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="InspecoesTratadas")
-    dados_excel = output.getvalue()
-    b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_tratadas.xlsx" style="font-size:18px; color:#fff; background-color:#007acc; padding:10px 15px; border-radius:5px; text-decoration:none;">📥 Baixar Excel Tratado</a>'
-    return href
+    name, authentication_status, username = authenticator.login('Login', 'main')
 
-kpi_css = """
-<style>
-.kpi-container {
-    display: flex;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-.kpi-box {
-    background-color: #007acc;
-    color: white;
-    border-radius: 10px;
-    padding: 20px 30px;
-    flex: 1;
-    text-align: center;
-    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-.kpi-box.pending {
-    background-color: #f39c12;
-}
-.kpi-box.percent {
-    background-color: #27ae60;
-}
-.kpi-title {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-}
-.kpi-value {
-    font-size: 2.5rem;
-    font-weight: 700;
-    line-height: 1;
-}
-</style>
-"""
+if authentication_status:
+    if username != "pati":
+        authenticator.logout('Sair', 'main')
 
-st.markdown("# Painel de Inspeções EPI")
+    st.write(f"👋 Bem-vindo(a), {name}!")
 
-menu_col1, menu_col2 = st.columns([4, 1])
-with menu_col1:
-    if st.session_state['usuario_logado']:
-        opcao = st.selectbox("Menu", ["Dashboard", "Sair"], key="menu_top")
-    else:
-        opcao = st.selectbox("Menu", ["Login", "Cadastro"], key="menu_top")
+    # --- Carrega dados do GitHub ---
+    @st.cache_data
+    def carregar_dados():
+        url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%83O%20EPI.xlsx"
+        return pd.read_excel(url, engine="openpyxl")
 
-if st.session_state['usuario_logado'] and opcao == "Sair":
-    st.session_state['usuario_logado'] = None
-    st.experimental_rerun()
+    def filtrar_ultimas_inspecoes_por_tecnico(df):
+        df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
+        com_data = df[df["DATA_INSPECAO"].notna()]
+        ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
+        tecnicos_com_data = ultimas["TÉCNICO"].unique()
+        sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_data)].drop_duplicates(subset=["TÉCNICO"])
+        return pd.concat([ultimas, sem_data], ignore_index=True)
 
-def tela_cadastro():
-    st.subheader("🆕 Cadastro de Usuário")
-    novo_usuario = st.text_input("Usuário")
-    nova_senha = st.text_input("Senha", type="password")
-    repetir_senha = st.text_input("Repita a senha", type="password")
-    def cadastrar():
-        if not novo_usuario or not nova_senha or not repetir_senha:
-            st.error("Preencha todos os campos!")
-            return
-        if novo_usuario in usuarios:
-            st.error("Usuário já existe!")
-            return
-        if nova_senha != repetir_senha:
-            st.error("As senhas não coincidem!")
-            return
-        usuarios[novo_usuario] = hash_senha(nova_senha)
-        salvar_usuarios(usuarios)
-        st.success("Usuário criado com sucesso! Faça login agora.")
-        st.session_state['modo'] = 'login'
-        st.experimental_rerun()
-    if st.button("Cadastrar"):
-        cadastrar()
-    if st.button("Já tenho conta / Voltar para Login"):
-        st.session_state['modo'] = 'login'
-        st.experimental_rerun()
+    def gerar_download_excel(df):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="InspecoesTratadas")
+        b64 = base64.b64encode(output.getvalue()).decode()
+        return f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_tratadas.xlsx">📥 Baixar Excel</a>'
 
-def tela_login():
-    st.subheader("🔐 Login")
-    usuario = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
-    def tentar_login():
-        if usuario not in usuarios:
-            st.error("Usuário não encontrado!")
-            return False
-        if not verificar_senha(senha, usuarios[usuario]):
-            st.error("Senha incorreta!")
-            return False
-        return True
-    if st.button("Entrar"):
-        if tentar_login():
-            st.session_state['usuario_logado'] = usuario
-            st.success(f"Bem-vindo(a), {usuario}!")
-            st.experimental_rerun()
-    if st.button("Cadastrar nova conta"):
-        st.session_state['modo'] = 'cadastro'
-        st.experimental_rerun()
+    kpi_css = """
+    <style>
+    .kpi-container {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .kpi-box {
+        background-color: #007acc;
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        flex: 1;
+        text-align: center;
+        box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
+    }
+    .kpi-box.pending { background-color: #f39c12; }
+    .kpi-box.percent { background-color: #27ae60; }
+    .kpi-title { font-size: 1rem; margin-bottom: 0.5rem; font-weight: 600; }
+    .kpi-value { font-size: 2rem; font-weight: 700; }
+    </style>
+    """
 
-def tela_dashboard():
+    st.title("🦺 Painel de Inspeções EPI")
+    st.markdown(kpi_css, unsafe_allow_html=True)
+
     df_raw = carregar_dados()
     df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+
+    # Filtros
     col1, col2 = st.columns(2)
     gerentes = df_tratado["GERENTE"].dropna().unique()
     coordenadores = df_tratado["COORDENADOR"].dropna().unique()
+
     with col1:
         gerente_sel = st.multiselect("Filtrar por Gerente", sorted(gerentes))
     with col2:
         coordenador_sel = st.multiselect("Filtrar por Coordenador", sorted(coordenadores))
+
     df_filtrado = df_tratado.copy()
     if gerente_sel:
         df_filtrado = df_filtrado[df_filtrado["GERENTE"].isin(gerente_sel)]
     if coordenador_sel:
         df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
+
     total = len(df_filtrado)
-    pending = df_filtrado["DATA_INSPECAO"].isna().sum()
-    ok = total - pending
+    pendentes = df_filtrado["DATA_INSPECAO"].isna().sum()
+    ok = total - pendentes
     pct_ok = round(ok / total * 100, 1) if total > 0 else 0
-    pct_pendente = round(100 - pct_ok, 1)
-    st.markdown(kpi_css, unsafe_allow_html=True)
+    pct_pend = 100 - pct_ok
+
     kpis_html = f"""
     <div class="kpi-container">
-        <div class="kpi-box percent">
-            <div class="kpi-title">Inspeções OK</div>
-            <div class="kpi-value">{ok}</div>
-        </div>
-        <div class="kpi-box pending">
-            <div class="kpi-title">Pendentes</div>
-            <div class="kpi-value">{pending}</div>
-        </div>
-        <div class="kpi-box percent">
-            <div class="kpi-title">% OK</div>
-            <div class="kpi-value">{pct_ok}%</div>
-        </div>
-        <div class="kpi-box pending">
-            <div class="kpi-title">% Pendentes</div>
-            <div class="kpi-value">{pct_pendente}%</div>
-        </div>
+        <div class="kpi-box percent"><div class="kpi-title">Inspeções OK</div><div class="kpi-value">{ok}</div></div>
+        <div class="kpi-box pending"><div class="kpi-title">Pendentes</div><div class="kpi-value">{pendentes}</div></div>
+        <div class="kpi-box percent"><div class="kpi-title">% OK</div><div class="kpi-value">{pct_ok}%</div></div>
+        <div class="kpi-box pending"><div class="kpi-title">% Pendentes</div><div class="kpi-value">{pct_pend}%</div></div>
     </div>
     """
     st.markdown(kpis_html, unsafe_allow_html=True)
+
     fig = px.pie(
         names=["OK", "Pendentes"],
-        values=[ok, pending],
+        values=[ok, pendentes],
+        title="Status das Inspeções",
         color=["OK", "Pendentes"],
-        color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"},
-        title="Status das Inspeções"
+        color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
     )
     st.plotly_chart(fig, use_container_width=True)
-    st.dataframe(df_filtrado)
+
+    # Gráfico por coordenador
+    status_coord = df_filtrado.groupby(["COORDENADOR", df_filtrado["DATA_INSPECAO"].notna()])\
+        .size().unstack(fill_value=0).rename(columns={True: "OK", False: "Pendentes"}).reset_index()
+    status_coord["Total"] = status_coord["OK"] + status_coord["Pendentes"]
+    status_coord["% OK"] = status_coord["OK"] / status_coord["Total"] * 100
+
+    if not status_coord.empty:
+        fig2 = px.bar(
+            status_coord,
+            x="COORDENADOR",
+            y="% OK",
+            title="% OK por Coordenador",
+            text=status_coord["% OK"].apply(lambda x: f"{x:.1f}%"),
+            color="% OK",
+            color_continuous_scale=px.colors.sequential.Mint
+        )
+        fig2.update_traces(textposition="outside")
+        st.plotly_chart(fig2, use_container_width=True)
+
+    # Tabela e botão de download
+    st.markdown("### Dados Tratados")
+    st.dataframe(df_filtrado, use_container_width=True)
     st.markdown(gerar_download_excel(df_filtrado), unsafe_allow_html=True)
 
-if st.session_state['modo'] == 'login' and not st.session_state['usuario_logado']:
-    tela_login()
-elif st.session_state['modo'] == 'cadastro' and not st.session_state['usuario_logado']:
-    tela_cadastro()
-elif st.session_state['usuario_logado']:
-    tela_dashboard()
-else:
-    st.error("Erro inesperado no estado do app. Reinicie a página.")
+elif authentication_status == False:
+    st.error('Usuário ou senha inválidos')
+elif authentication_status is None:
+    st.warning('Por favor, faça login')
