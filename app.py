@@ -199,7 +199,7 @@ if authentication_status:
             color_continuous_scale=px.colors.sequential.Mint
         )
         fig2.update_traces(textposition="outside")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, key="grafico_coordenador")
     else:
         st.info("Nenhum dado disponível para o gráfico de coordenadores.")
 
