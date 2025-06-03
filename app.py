@@ -4,12 +4,15 @@ import plotly.express as px
 from io import BytesIO
 
 @st.cache_data
-url_github = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-df = carregar_dados_github(url_github)
-
+def carregar_dados_github(url):
+    df = pd.read_excel(url, engine='openpyxl')
     df['DATA_INSPECAO'] = pd.to_datetime(df['DATA_INSPECAO'], errors='coerce')
     df.loc[df['DATA_INSPECAO'] == pd.Timestamp('2001-01-01'), 'DATA_INSPECAO'] = pd.NaT
     return df
+
+# 👇 ESTA LINHA TEM QUE FICAR AQUI, FORA DE QUALQUER FUNÇÃO
+url_github = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
+
 
 def consolidar_inspecoes_sem_duplicar(df):
     # Inspecionados - pega só a última inspeção por técnico + produto
