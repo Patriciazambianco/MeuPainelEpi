@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 
 # URL do arquivo Excel no GitHub (raw)
-URL_GITHUB = "https://github.com/seuusuario/seurepositorio/raw/main/seuarquivo.xlsx"
+URL_GITHUB = ""https://github.com/Patriciazambianco/MeuPainelEpi/raw/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 
 @st.cache_data
 def carregar_dados():
