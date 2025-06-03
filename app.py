@@ -4,7 +4,7 @@ import io
 import base64
 import plotly.express as px
 
-st.set_page_config(page_title="Painel de Inspeções EPI", layout="wide")
+st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
 # --- Função para carregar dados direto do GitHub ---
 @st.cache_data
@@ -44,7 +44,7 @@ def gerar_download_excel(df):
     return href
 
 # --- Início do app ---
-st.title("Painel de Inspeções EPI")
+st.title("Inspeções EPI")
 
 # Carrega e trata os dados
 df_raw = carregar_dados()
