@@ -149,7 +149,7 @@ kpis_html = f"""
 
 st.markdown(kpis_html, unsafe_allow_html=True)
 
-# Gráfico pizza com cores vibrantes
+# Gráfico pizza com cores vibrantes - status geral
 fig = px.pie(
     names=["OK", "Pendentes"],
     values=[ok, pending],
@@ -158,6 +158,32 @@ fig = px.pie(
     color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
 )
 st.plotly_chart(fig, use_container_width=True)
+
+# Gráfico % por Coordenador
+# Calcula por coordenador:
+df_coord = df_filtrado.groupby("COORDENADOR").apply(
+    lambda x: pd.Series({
+        "OK": x["DATA_INSPECAO"].notna().sum(),
+        "Pendentes": x["DATA_INSPECAO"].isna().sum()
+    })
+).reset_index()
+
+df_coord["Total"] = df_coord["OK"] + df_coord["Pendentes"]
+df_coord["% OK"] = (df_coord["OK"] / df_coord["Total"] * 100).round(1)
+
+fig2 = px.bar(
+    df_coord.sort_values("% OK", ascending=False),
+    x="COORDENADOR",
+    y="% OK",
+    title="Percentual de Inspeções OK por Coordenador",
+    labels={"COORDENADOR": "Coordenador", "% OK": "% Inspeções OK"},
+    text="% OK",
+    color="% OK",
+    color_continuous_scale="Mint"
+)
+fig2.update_traces(texttemplate='%{text}%', textposition='outside')
+fig2.update_layout(yaxis=dict(range=[0, 100]), uniformtext_minsize=8, uniformtext_mode='hide')
+st.plotly_chart(fig2, use_container_width=True)
 
 # Tabela e download
 st.markdown("### Dados Tratados")
