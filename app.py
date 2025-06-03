@@ -23,10 +23,10 @@ def filtrar_ultimas_inspecoes(df):
     sem_data = df[df["DATA_INSPECAO"].isna()]
 
     # pega apenas a última por TÉCNICO + PRODUTO
-    ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO", "PRODUTO_PRINC_INSPECAO"], keep="last")
+    ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"], keep="last")
 
     # filtra os sem inspeção que ainda não existem em ultimas
-    sem_data = sem_data.merge(ultimas[["TÉCNICO", "PRODUTO_PRINC_INSPECAO"]], on=["TÉCNICO", "PRODUTO_PRINC_INSPECAO"], how="left", indicator=True)
+    sem_data = sem_data.merge(ultimas[["TÉCNICO", "PRODUTO_SIMILAR"]], on=["TÉCNICO", "PRODUTO_SIMILAR"], how="left", indicator=True)
     apenas_sem = sem_data[sem_data['_merge'] == 'left_only'].drop(columns=['_merge'])
 
     # concatena o resultado final
@@ -52,19 +52,19 @@ df_tratado = filtrar_ultimas_inspecoes(df_raw)
 
 # Filtros
 col1, col2 = st.columns(2)
-gerentes = df_tratado["GERENTE_IMEDIATO"].dropna().unique()
-coordenadores = df_tratado["COORDENADOR_IMEDIATO"].dropna().unique()
+gerentes = df_tratado["GERENTE"].dropna().unique()
+coordenadores = df_tratado["COORDENADOR"].dropna().unique()
 
 with col1:
-    gerente_sel = st.multiselect("Filtrar por Gerente Imediato", sorted(gerentes))
+    gerente_sel = st.multiselect("Filtrar por Gerente", sorted(gerentes))
 with col2:
-    coordenador_sel = st.multiselect("Filtrar por Coordenador Imediato", sorted(coordenadores))
+    coordenador_sel = st.multiselect("Filtrar por Coordenador", sorted(coordenadores))
 
 df_filtrado = df_tratado.copy()
 if gerente_sel:
-    df_filtrado = df_filtrado[df_filtrado["GERENTE_IMEDIATO"].isin(gerente_sel)]
+    df_filtrado = df_filtrado[df_filtrado["GERENTE"].isin(gerente_sel)]
 if coordenador_sel:
-    df_filtrado = df_filtrado[df_filtrado["COORDENADOR_IMEDIATO"].isin(coordenador_sel)]
+    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
 
 # KPIs
 total = len(df_filtrado)
