@@ -6,7 +6,7 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# --- CSS para fundo, KPIs e botão piscando ---
+# --- CSS Customizado ---
 custom_css = """
 <style>
     .stApp {
@@ -51,7 +51,6 @@ custom_css = """
         line-height: 1;
     }
 
-    /* Botão piscando */
     .blinking-button {
         font-size: 16px;
         color: white !important;
@@ -75,7 +74,6 @@ custom_css = """
         margin-bottom: 20px;
     }
 
-    /* Ajusta texto das tabelas */
     .stDataFrame div.row_widget.stDataFrameWidget div.cell, 
     .stDataFrame div.row_widget.stDataFrameWidget div.cell > div {
         color: black !important;
@@ -84,14 +82,13 @@ custom_css = """
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- Função para carregar dados direto do GitHub ---
+# --- Carregamento de dados ---
 @st.cache_data
 def carregar_dados():
-    url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
+    url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
     return df
 
-# --- Função para tratar por técnico (última inspeção ou pendente) ---
 def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
@@ -100,7 +97,6 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)].drop_duplicates(subset=["TÉCNICO"])
     return pd.concat([ultimas, sem_data], ignore_index=True)
 
-# --- Função para gerar botão de download com pendências ---
 def gerar_download_pendencias_excel(df):
     pendencias = df[df["DATA_INSPECAO"].isna()]
     output = io.BytesIO()
@@ -117,12 +113,13 @@ def gerar_download_pendencias_excel(df):
     '''
     return href
 
-# --- INÍCIO DO APP ---
+# --- INÍCIO ---
 st.title("🦺 Painel de Inspeções EPI")
+
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
-# Botão de download no topo
+# Botão de download piscante
 st.markdown(gerar_download_pendencias_excel(df_tratado), unsafe_allow_html=True)
 
 # Filtros
@@ -148,7 +145,6 @@ ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
 
-# KPIs visuais
 kpis_html = f"""
 <div class="kpi-container">
     <div class="kpi-box percent">
@@ -171,15 +167,51 @@ kpis_html = f"""
 """
 st.markdown(kpis_html, unsafe_allow_html=True)
 
-# Gráfico
+# Gráfico geral
 fig = px.pie(
     names=["OK", "Pendentes"],
     values=[ok, pending],
-    title="Status das Inspeções",
+    title="Status Geral das Inspeções",
     color=["OK", "Pendentes"],
     color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
 )
 st.plotly_chart(fig, use_container_width=True)
+
+# Gráficos por Gerente
+st.markdown("### 📊 Status por Gerente")
+if "GERENTE" in df_filtrado.columns:
+    gerentes_grupo = df_filtrado.groupby("GERENTE")["DATA_INSPECAO"].apply(lambda x: pd.Series({
+        "OK": x.notna().sum(),
+        "Pendentes": x.isna().sum()
+    })).unstack().fillna(0)
+
+    for gerente, row in gerentes_grupo.iterrows():
+        fig_gerente = px.pie(
+            names=["OK", "Pendentes"],
+            values=[row["OK"], row["Pendentes"]],
+            title=f"Gerente: {gerente}",
+            color=["OK", "Pendentes"],
+            color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
+        )
+        st.plotly_chart(fig_gerente, use_container_width=True)
+
+# Gráficos por Coordenador
+st.markdown("### 📊 Status por Coordenador")
+if "COORDENADOR" in df_filtrado.columns:
+    coord_grupo = df_filtrado.groupby("COORDENADOR")["DATA_INSPECAO"].apply(lambda x: pd.Series({
+        "OK": x.notna().sum(),
+        "Pendentes": x.isna().sum()
+    })).unstack().fillna(0)
+
+    for coordenador, row in coord_grupo.iterrows():
+        fig_coord = px.pie(
+            names=["OK", "Pendentes"],
+            values=[row["OK"], row["Pendentes"]],
+            title=f"Coordenador: {coordenador}",
+            color=["OK", "Pendentes"],
+            color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
+        )
+        st.plotly_chart(fig_coord, use_container_width=True)
 
 # Tabela
 st.markdown("### 🔍 Dados Tratados")
