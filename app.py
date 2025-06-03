@@ -8,29 +8,35 @@ st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
 # --- Função para carregar dados direto do GitHub ---
 @st.cache_data
-
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
     return df
 
-# --- Função para filtrar última inspeção por TÉCNICO + PRODUTO ---
-def filtrar_ultimas_inspecoes(df):
+# --- Função para filtrar última inspeção por TÉCNICO (independente do produto) ---
+def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-    # separa os com e sem inspeção
+    # Técnicos que já fizeram alguma inspeção (independente do produto)
     com_data = df[df["DATA_INSPECAO"].notna()]
-    sem_data = df[df["DATA_INSPECAO"].isna()]
 
-    # pega apenas a última por TÉCNICO + PRODUTO
-    ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"], keep="last")
+    # Pega a última inspeção por técnico (independente do produto)
+    ultimas_por_tecnico = (
+        com_data
+        .sort_values("DATA_INSPECAO")
+        .drop_duplicates(subset=["TÉCNICO"], keep="last")
+    )
 
-    # filtra os sem inspeção que ainda não existem em ultimas
-    sem_data = sem_data.merge(ultimas[["TÉCNICO", "PRODUTO_SIMILAR"]], on=["TÉCNICO", "PRODUTO_SIMILAR"], how="left", indicator=True)
-    apenas_sem = sem_data[sem_data['_merge'] == 'left_only'].drop(columns=['_merge'])
+    # Técnicos que nunca fizeram nenhuma inspeção
+    tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
+    sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
 
-    # concatena o resultado final
-    resultado = pd.concat([ultimas, apenas_sem], ignore_index=True)
+    # Pega só uma linha por técnico pendente (para não duplicar)
+    sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
+
+    # Junta os técnicos com última inspeção + técnicos pendentes
+    resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
+
     return resultado
 
 # --- Função para permitir download do Excel tratado ---
@@ -48,7 +54,7 @@ st.title("Inspeções EPI")
 
 # Carrega e trata os dados
 df_raw = carregar_dados()
-df_tratado = filtrar_ultimas_inspecoes(df_raw)
+df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
 # Filtros
 col1, col2 = st.columns(2)
