@@ -165,6 +165,10 @@ if authentication_status:
 
     st.markdown(kpis_html, unsafe_allow_html=True)
 
+    # Criar placeholders para gráficos para evitar erros de remoção no DOM
+    placeholder_pizza = st.empty()
+    placeholder_bar = st.empty()
+
     # Gráfico pizza com cores vibrantes
     fig = px.pie(
         names=["OK", "Pendentes"],
@@ -173,7 +177,7 @@ if authentication_status:
         color=["OK", "Pendentes"],
         color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
     )
-    st.plotly_chart(fig, use_container_width=True)
+    placeholder_pizza.plotly_chart(fig, use_container_width=True, key="grafico_pizza")
 
     # Gráfico % por Coordenador
     status_por_coord = (
@@ -199,9 +203,9 @@ if authentication_status:
             color_continuous_scale=px.colors.sequential.Mint
         )
         fig2.update_traces(textposition="outside")
-        st.plotly_chart(fig2, use_container_width=True, key="grafico_coordenador")
+        placeholder_bar.plotly_chart(fig2, use_container_width=True, key="grafico_barra")
     else:
-        st.info("Nenhum dado disponível para o gráfico de coordenadores.")
+        placeholder_bar.info("Nenhum dado disponível para o gráfico de coordenadores.")
 
     # Tabela e download
     st.markdown("### Dados Tratados")
