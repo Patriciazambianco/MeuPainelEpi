@@ -4,11 +4,11 @@ import io
 import base64
 import plotly.express as px
 
-st.set_page_config(page_title="Inspeções EPI", layout="wide")
+st.set_page_config(page_title="Painel de Inspeções EPI", layout="wide", initial_sidebar_state="collapsed")
 
-# --- Login automático ---
-NOME_USUARIO = "Pati"
-st.markdown(f"👋 Bem-vindo(a), **{NOME_USUARIO}**!")
+# Login automático
+USUARIO_LOGADO = "Pati"
+st.success(f"🔓 Login automático como **{USUARIO_LOGADO}**")
 
 # --- Função para carregar dados direto do GitHub ---
 @st.cache_data
@@ -17,157 +17,118 @@ def carregar_dados():
     df = pd.read_excel(url, engine="openpyxl")
     return df
 
-# --- Função para filtrar última inspeção por TÉCNICO ---
-def filtrar_ultimas_inspecoes_por_tecnico(df):
+# --- Filtrar última inspeção por técnico (único) ---
+def filtrar_ultimas_inspecoes(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
-    ultimas_por_tecnico = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
-    tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
-    sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
-    sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
-    resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
-    return resultado
+    ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates("TÉCNICO", keep="last")
+    tecnicos_com_inspecao = ultimas["TÉCNICO"].unique()
+    sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)].drop_duplicates("TÉCNICO")
+    return pd.concat([ultimas, sem_data], ignore_index=True)
 
-# --- Função para download do Excel tratado ---
+# --- Download do Excel tratado ---
 def gerar_download_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="InspecoesTratadas")
-    dados_excel = output.getvalue()
-    b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_tratadas.xlsx" style="font-size:18px; color:#fff; background-color:#007acc; padding:10px 15px; border-radius:5px; text-decoration:none;">📥 Baixar Excel Tratado</a>'
-    return href
+    b64 = base64.b64encode(output.getvalue()).decode()
+    link = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_tratadas.xlsx">📥 Baixar Excel</a>'
+    return link
 
-# --- CSS dos KPIs ---
+# --- CSS para os KPIs ---
 kpi_css = """
 <style>
 .kpi-container {
     display: flex;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    gap: 1rem;
+    margin: 1rem 0;
 }
 .kpi-box {
     background-color: #007acc;
     color: white;
     border-radius: 10px;
-    padding: 20px 30px;
+    padding: 20px;
     flex: 1;
     text-align: center;
-    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Segoe UI', sans-serif;
+    box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
 }
-.kpi-box.pending {
-    background-color: #f39c12;
-}
-.kpi-box.percent {
-    background-color: #27ae60;
-}
-.kpi-title {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-}
-.kpi-value {
-    font-size: 2.5rem;
-    font-weight: 700;
-    line-height: 1;
-}
+.kpi-box.pending { background-color: #f39c12; }
+.kpi-box.percent { background-color: #27ae60; }
+.kpi-title { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: bold; }
+.kpi-value { font-size: 2.5rem; font-weight: bold; }
 </style>
 """
 
-# --- Título ---
+# --- Painel ---
 st.title("🦺 Painel de Inspeções EPI")
 
-# --- Dados ---
 df_raw = carregar_dados()
-df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+df_tratado = filtrar_ultimas_inspecoes(df_raw)
 
-# --- Filtros ---
+# Filtros
 col1, col2 = st.columns(2)
-gerentes = df_tratado["GERENTE"].dropna().unique()
-coordenadores = df_tratado["COORDENADOR"].dropna().unique()
-
 with col1:
-    gerente_sel = st.multiselect("Filtrar por Gerente", sorted(gerentes))
+    gerente_sel = st.multiselect("Filtrar por Gerente", sorted(df_tratado["GERENTE"].dropna().unique()))
 with col2:
-    coordenador_sel = st.multiselect("Filtrar por Coordenador", sorted(coordenadores))
+    coordenador_sel = st.multiselect("Filtrar por Coordenador", sorted(df_tratado["COORDENADOR"].dropna().unique()))
 
-df_filtrado = df_tratado.copy()
+df_filt = df_tratado.copy()
 if gerente_sel:
-    df_filtrado = df_filtrado[df_filtrado["GERENTE"].isin(gerente_sel)]
+    df_filt = df_filt[df_filt["GERENTE"].isin(gerente_sel)]
 if coordenador_sel:
-    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
+    df_filt = df_filt[df_filt["COORDENADOR"].isin(coordenador_sel)]
 
-# --- KPIs ---
-total = len(df_filtrado)
-pending = df_filtrado["DATA_INSPECAO"].isna().sum()
-ok = total - pending
+# KPIs
+total = len(df_filt)
+pendentes = df_filt["DATA_INSPECAO"].isna().sum()
+ok = total - pendentes
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
-pct_pendente = round(100 - pct_ok, 1)
+pct_pend = 100 - pct_ok
 
-# --- Mostra KPIs ---
 st.markdown(kpi_css, unsafe_allow_html=True)
-kpis_html = f"""
+kpi_html = f"""
 <div class="kpi-container">
-    <div class="kpi-box percent">
-        <div class="kpi-title">Inspeções OK</div>
-        <div class="kpi-value">{ok}</div>
-    </div>
-    <div class="kpi-box pending">
-        <div class="kpi-title">Pendentes</div>
-        <div class="kpi-value">{pending}</div>
-    </div>
-    <div class="kpi-box percent">
-        <div class="kpi-title">% OK</div>
-        <div class="kpi-value">{pct_ok}%</div>
-    </div>
-    <div class="kpi-box pending">
-        <div class="kpi-title">% Pendentes</div>
-        <div class="kpi-value">{pct_pendente}%</div>
-    </div>
+    <div class="kpi-box percent"><div class="kpi-title">Inspeções OK</div><div class="kpi-value">{ok}</div></div>
+    <div class="kpi-box pending"><div class="kpi-title">Pendentes</div><div class="kpi-value">{pendentes}</div></div>
+    <div class="kpi-box percent"><div class="kpi-title">% OK</div><div class="kpi-value">{pct_ok}%</div></div>
+    <div class="kpi-box pending"><div class="kpi-title">% Pendentes</div><div class="kpi-value">{pct_pend}%</div></div>
 </div>
 """
-st.markdown(kpis_html, unsafe_allow_html=True)
+st.markdown(kpi_html, unsafe_allow_html=True)
 
-# --- Gráfico Pizza ---
-fig = px.pie(
+# Gráfico Pizza
+fig1 = px.pie(
     names=["OK", "Pendentes"],
-    values=[ok, pending],
+    values=[ok, pendentes],
     title="Status das Inspeções",
     color=["OK", "Pendentes"],
     color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig1, use_container_width=True)
 
-# --- Gráfico por Coordenador ---
-status_por_coord = (
-    df_filtrado
-    .groupby(["COORDENADOR", df_filtrado["DATA_INSPECAO"].notna()])
-    .size()
-    .unstack(fill_value=0)
-    .rename(columns={True: "OK", False: "Pendentes"})
-    .reset_index()
+# Gráfico por Coordenador
+df_bar = (
+    df_filt.groupby(["COORDENADOR", df_filt["DATA_INSPECAO"].notna()])
+    .size().unstack(fill_value=0)
+    .rename(columns={True: "OK", False: "Pendentes"}).reset_index()
 )
-status_por_coord["Total"] = status_por_coord["OK"] + status_por_coord["Pendentes"]
-status_por_coord["% OK"] = (status_por_coord["OK"] / status_por_coord["Total"]) * 100
+df_bar["Total"] = df_bar["OK"] + df_bar["Pendentes"]
+df_bar["% OK"] = (df_bar["OK"] / df_bar["Total"]) * 100
 
-if not status_por_coord.empty:
+if not df_bar.empty:
     fig2 = px.bar(
-        status_por_coord,
-        x="COORDENADOR",
-        y="% OK",
+        df_bar, x="COORDENADOR", y="% OK", color="% OK",
+        text=df_bar["% OK"].apply(lambda x: f"{x:.1f}%"),
         title="% Inspeções OK por Coordenador",
-        labels={"% OK": "% Inspeções OK", "COORDENADOR": "Coordenador"},
-        text=status_por_coord["% OK"].apply(lambda x: f"{x:.1f}%"),
-        color="% OK",
-        color_continuous_scale=px.colors.sequential.Mint
+        color_continuous_scale="Mint"
     )
     fig2.update_traces(textposition="outside")
     st.plotly_chart(fig2, use_container_width=True)
-else:
-    st.info("Nenhum dado disponível para o gráfico de coordenadores.")
 
-# --- Tabela ---
-st.markdown("### Dados Tratados")
-st.dataframe(df_filtrado, use_container_width=True)
-st.markdown(gerar_download_excel(df_filtrado), unsafe_allow_html=True)
+# Tabela
+st.markdown("### 📄 Dados Tratados")
+st.dataframe(df_filt, use_container_width=True)
+
+# Download
+st.markdown(gerar_download_excel(df_filt), unsafe_allow_html=True)
