@@ -13,6 +13,23 @@ st.markdown(
     .stApp {
         background-color: #d0f0c0;
     }
+    /* Botão piscando */
+    @keyframes piscar {
+        0%, 100% {opacity: 1;}
+        50% {opacity: 0.4;}
+    }
+    .botao-piscando {
+        animation: piscar 1.5s infinite;
+        font-size:18px; 
+        color:#fff; 
+        background-color:#e74c3c; 
+        padding:10px 15px; 
+        border-radius:5px; 
+        text-decoration:none;
+        font-weight: 700;
+        display: inline-block;
+        margin-bottom: 20px;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -47,10 +64,10 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
 def gerar_download_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="InspecoesTratadas")
+        df.to_excel(writer, index=False, sheet_name="Pendentes")
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_tratadas.xlsx" style="font-size:18px; color:#fff; background-color:#007acc; padding:10px 15px; border-radius:5px; text-decoration:none;">📥 Baixar Excel Tratado</a>'
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="pendentes_inspecoes.xlsx" class="botao-piscando">📥 Baixar Pendentes</a>'
     return href
 
 kpi_css = """
@@ -94,16 +111,19 @@ st.title("🦺 Painel de Inspeções EPI")
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
-# Filtros lado a lado: gerente e coordenador
-col1, col2 = st.columns(2)
+# Filtros dependentes
+col1, col2 = st.columns([2, 3])
 
 gerentes = df_tratado["GERENTE"].dropna().unique()
-coordenadores = df_tratado["COORDENADOR"].dropna().unique()
+gerente_sel = col1.multiselect("Filtrar por Gerente", sorted(gerentes))
 
-with col1:
-    gerente_sel = st.multiselect("Filtrar por Gerente", sorted(gerentes))
-with col2:
-    coordenador_sel = st.multiselect("Filtrar por Coordenador", sorted(coordenadores))
+# Coordenadores filtrados pelo gerente selecionado
+if gerente_sel:
+    coord_filtrados = df_tratado[df_tratado["GERENTE"].isin(gerente_sel)]["COORDENADOR"].dropna().unique()
+else:
+    coord_filtrados = df_tratado["COORDENADOR"].dropna().unique()
+
+coordenador_sel = col2.multiselect("Filtrar por Coordenador", sorted(coord_filtrados))
 
 df_filtrado = df_tratado.copy()
 if gerente_sel:
@@ -111,8 +131,14 @@ if gerente_sel:
 if coordenador_sel:
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
 
+# Só pendentes pro download e visualização (com filtro aplicado)
+df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
+
+# Botão download pendentes no topo, piscando
+st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
+
 total = len(df_filtrado)
-pending = df_filtrado["DATA_INSPECAO"].isna().sum()
+pending = len(df_pendentes)
 ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
@@ -151,7 +177,5 @@ fig = px.pie(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("### Dados Tratados")
-st.dataframe(df_filtrado, use_container_width=True)
-
-st.markdown(gerar_download_excel(df_filtrado), unsafe_allow_html=True)
+st.markdown("### Dados Pendentes")
+st.dataframe(df_pendentes, use_container_width=True)
