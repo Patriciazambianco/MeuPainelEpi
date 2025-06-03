@@ -187,18 +187,21 @@ if authentication_status:
     status_por_coord["Total"] = status_por_coord["OK"] + status_por_coord["Pendentes"]
     status_por_coord["% OK"] = (status_por_coord["OK"] / status_por_coord["Total"]) * 100
 
-    fig2 = px.bar(
-        status_por_coord,
-        x="COORDENADOR",
-        y="% OK",
-        title="% Inspeções OK por Coordenador",
-        labels={"% OK": "% Inspeções OK", "COORDENADOR": "Coordenador"},
-        text=status_por_coord["% OK"].apply(lambda x: f"{x:.1f}%"),
-        color="% OK",
-        color_continuous_scale="Mint"
-    )
-    fig2.update_traces(textposition="outside")
-    st.plotly_chart(fig2, use_container_width=True)
+    if not status_por_coord.empty and status_por_coord["Total"].sum() > 0:
+        fig2 = px.bar(
+            status_por_coord,
+            x="COORDENADOR",
+            y="% OK",
+            title="% Inspeções OK por Coordenador",
+            labels={"% OK": "% Inspeções OK", "COORDENADOR": "Coordenador"},
+            text=status_por_coord["% OK"].apply(lambda x: f"{x:.1f}%"),
+            color="% OK",
+            color_continuous_scale=px.colors.sequential.Mint
+        )
+        fig2.update_traces(textposition="outside")
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("Nenhum dado disponível para o gráfico de coordenadores.")
 
     # Tabela e download
     st.markdown("### Dados Tratados")
