@@ -6,6 +6,18 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
+# Cor de fundo Verde Menta Pastel
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #d0f0c0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- Função para carregar dados direto do GitHub ---
 @st.cache_data
 def carregar_dados():
@@ -81,40 +93,6 @@ kpi_css = """
 </style>
 """
 
-# --- Função para plotar gráfico de % pendentes por coordenador ---
-def plotar_percentual_pendentes_por_coordenador(df):
-    if "COORDENADOR" not in df.columns or "DATA_INSPECAO" not in df.columns:
-        st.warning("Colunas necessárias ('COORDENADOR' e 'DATA_INSPECAO') não encontradas.")
-        return
-
-    df['Status'] = df['DATA_INSPECAO'].apply(lambda x: 'Pendente' if pd.isna(x) else 'OK')
-
-    resumo = (
-        df.groupby(['COORDENADOR', 'Status'])
-        .size()
-        .reset_index(name='Qtd')
-    )
-
-    resumo_pivot = resumo.pivot(index='COORDENADOR', columns='Status', values='Qtd').fillna(0)
-    resumo_pivot['Total'] = resumo_pivot.sum(axis=1)
-    resumo_pivot['% Pendentes'] = (resumo_pivot.get('Pendente', 0) / resumo_pivot['Total']) * 100
-
-    resumo_pivot = resumo_pivot.sort_values('% Pendentes', ascending=False).reset_index()
-
-    fig = px.bar(
-        resumo_pivot,
-        x='COORDENADOR',
-        y='% Pendentes',
-        text=resumo_pivot['% Pendentes'].apply(lambda x: f'{x:.1f}%'),
-        title='Percentual de Pendentes por Coordenador',
-        labels={'% Pendentes': '% Pendentes', 'COORDENADOR': 'Coordenador'},
-        color='% Pendentes',
-        color_continuous_scale='OrRd'
-    )
-    fig.update_traces(textposition='outside')
-    fig.update_layout(yaxis=dict(range=[0, 100]))
-    st.plotly_chart(fig, use_container_width=True)
-
 # --- Início do app ---
 st.title("🦺 Painel de Inspeções EPI")
 
@@ -180,9 +158,6 @@ fig = px.pie(
     color_discrete_map={"OK": "#27ae60", "Pendentes": "#f39c12"}
 )
 st.plotly_chart(fig, use_container_width=True)
-
-# Gráfico % pendentes por coordenador
-plotar_percentual_pendentes_por_coordenador(df_filtrado)
 
 # Tabela e download
 st.markdown("### Dados Tratados")
