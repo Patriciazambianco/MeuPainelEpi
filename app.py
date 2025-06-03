@@ -1,134 +1,54 @@
 import streamlit as st
 import pandas as pd
-import io
-import base64
 import plotly.express as px
 
-st.set_page_config(page_title="Inspeções EPI", layout="wide")
+# URL do arquivo Excel no GitHub (raw)
+URL_GITHUB = "https://github.com/seuusuario/seurepositorio/raw/main/seuarquivo.xlsx"
 
-# --- Fundo colorido customizado via CSS ---
-page_bg = """
-<style>
-body {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-h1, h2, h3, h4, h5, h6, .stMetric-label {
-    color: white !important;
-}
-.stButton>button {
-    background-color: #ff5722;
-    color: white;
-    font-weight: bold;
-    border-radius: 8px;
-}
-.stButton>button:hover {
-    background-color: #e64a19;
-}
-.blink {
-    animation: blink-animation 1.5s steps(5, start) infinite;
-    -webkit-animation: blink-animation 1.5s steps(5, start) infinite;
-}
-@keyframes blink-animation {
-    to {
-        visibility: hidden;
-    }
-}
-@-webkit-keyframes blink-animation {
-    to {
-        visibility: hidden;
-    }
-}
-</style>
-"""
-st.markdown(page_bg, unsafe_allow_html=True)
-
-# --- Função para carregar dados direto do GitHub ---
 @st.cache_data
 def carregar_dados():
-    url = "https://github.com/Patriciazambianco/MeuPainelEpi/raw/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-    df = pd.read_excel(url, engine="openpyxl")
+    df = pd.read_excel(URL_GITHUB, engine="openpyxl")
     return df
 
-# --- Função para filtrar última inspeção por TÉCNICO ---
 def filtrar_por_tecnico(df):
+    # Converter para datetime e tratar erros
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-    # separa os com e sem inspeção
-    com_data = df[df["DATA_INSPECAO"].notna()]
-    sem_data = df[df["DATA_INSPECAO"].isna()]
+    # Para cada técnico, manter apenas a última inspeção (se existir)
+    df_ultimo = df.sort_values("DATA_INSPECAO").groupby("TÉCNICO").last().reset_index()
 
-    # pega apenas a última por TÉCNICO
-    ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
+    # Trazer também técnicos sem inspeção (pendentes)
+    tecnicos_com_inspecao = set(df_ultimo["TÉCNICO"])
+    tecnicos_sem_inspecao = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)][["TÉCNICO"]].drop_duplicates()
 
-    # filtra os sem inspeção que ainda não existem em ultimas
-    sem_data = sem_data.merge(ultimas[["TÉCNICO"]], on=["TÉCNICO"], how="left", indicator=True)
-    apenas_sem = sem_data[sem_data['_merge'] == 'left_only'].drop(columns=['_merge'])
+    # Unir pendentes (sem inspeção) com os que têm última inspeção
+    df_final = pd.concat([df_ultimo, tecnicos_sem_inspecao], ignore_index=True, sort=False)
 
-    # concatena o resultado final
-    resultado = pd.concat([ultimas, apenas_sem], ignore_index=True)
-    return resultado
+    return df_final
 
-# --- Função para gerar o Excel com somente pendentes ---
-def gerar_download_excel_pendentes(df):
-    pendentes = df[df["DATA_INSPECAO"].isna()]
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        pendentes.to_excel(writer, index=False, sheet_name="Pendentes")
-    dados_excel = output.getvalue()
-    b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a class="blink" href="data:application/octet-stream;base64,{b64}" download="pendencias_inspecoes.xlsx">📥 Baixar Excel só Pendentes</a>'
-    return href
+def calcular_percentuais(df):
+    total = len(df)
+    ok = df["DATA_INSPECAO"].notna().sum()
+    pendente = df["DATA_INSPECAO"].isna().sum()
 
-# --- Início do app ---
-st.title("🦺 Inspeções EPI")
+    perc_ok = round((ok / total) * 100, 2) if total else 0
+    perc_pendente = round((pendente / total) * 100, 2) if total else 0
 
-# Botão download pendentes no topo
-df_raw = carregar_dados()
-df_tratado = filtrar_por_tecnico(df_raw)
-st.markdown(gerar_download_excel_pendentes(df_tratado), unsafe_allow_html=True)
+    return perc_ok, perc_pendente
 
-# Filtros
-col1, col2 = st.columns(2)
-gerentes = df_tratado["GERENTE"].dropna().unique()
-coordenadores = df_tratado["COORDENADOR"].dropna().unique()
-
-with col1:
-    gerente_sel = st.multiselect("Filtrar por Gerente", sorted(gerentes))
-with col2:
-    coordenador_sel = st.multiselect("Filtrar por Coordenador", sorted(coordenadores))
-
-df_filtrado = df_tratado.copy()
-if gerente_sel:
-    df_filtrado = df_filtrado[df_filtrado["GERENTE"].isin(gerente_sel)]
-if coordenador_sel:
-    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
-
-# KPIs
-total = len(df_filtrado)
-pending = df_filtrado["DATA_INSPECAO"].isna().sum()
-ok = total - pending
-pct_ok = round(ok / total * 100, 1) if total > 0 else 0
-pct_pendente = round(100 - pct_ok, 1) if total > 0 else 0
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Inspeções OK", ok)
-col2.metric("Pendentes", pending)
-col3.metric("% OK", f"{pct_ok}%")
-
-# Gráficos de pizza por GERENTE e COORDENADOR
 def grafico_pizza_por_col(df, coluna, titulo):
-    dados = df.groupby(coluna)["DATA_INSPECAO"].apply(
-        lambda x: pd.Series({
-            "OK": x.notna().sum(),
-            "Pendente": x.isna().sum()
-        })
+    resumo = df.groupby(coluna).agg(
+        OK = pd.NamedAgg(column="DATA_INSPECAO", aggfunc=lambda x: x.notna().sum()),
+        Pendente = pd.NamedAgg(column="DATA_INSPECAO", aggfunc=lambda x: x.isna().sum())
     ).reset_index()
+
+    dados_melt = resumo.melt(id_vars=coluna, value_vars=["OK", "Pendente"], var_name="Status", value_name="Quantidade")
+
     fig = px.pie(
-        dados.melt(id_vars=coluna, value_vars=["OK", "Pendente"]),
-        names="variable",
-        values="value",
-        color="variable",
+        dados_melt,
+        names="Status",
+        values="Quantidade",
+        color="Status",
         color_discrete_map={"OK": "green", "Pendente": "red"},
         title=titulo,
         facet_col=coluna,
@@ -138,12 +58,35 @@ def grafico_pizza_por_col(df, coluna, titulo):
     fig.update_layout(margin=dict(t=50,b=0,l=0,r=0), legend_title_text='Status')
     return fig
 
-st.markdown("### Status das Inspeções por Gerente")
+# --- Início do app ---
+
+st.set_page_config(page_title="Dashboard de Inspeções EPI", layout="wide")
+
+st.title("🔍 Dashboard de Inspeções EPI")
+
+# Botão para baixar apenas pendentes
+df_raw = carregar_dados()
+df_filtrado = filtrar_por_tecnico(df_raw)
+
+pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
+excel_bytes = pendentes.to_excel(index=False, engine="openpyxl")
+st.download_button(
+    label="📥 Baixar Excel com Pendências",
+    data=excel_bytes,
+    file_name="pendencias_epi.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    key="download-pendentes",
+)
+
+# Mostrar métricas gerais
+perc_ok, perc_pendente = calcular_percentuais(df_filtrado)
+
+col1, col2 = st.columns(2)
+col1.metric("✅ % Inspeções OK", f"{perc_ok:.2f}%")
+col2.metric("⚠️ % Pendentes", f"{perc_pendente:.2f}%")
+
+# Gráfico por gerente
 st.plotly_chart(grafico_pizza_por_col(df_filtrado, "GERENTE", "Status por Gerente"), use_container_width=True)
 
-st.markdown("### Status das Inspeções por Coordenador")
+# Gráfico por coordenador
 st.plotly_chart(grafico_pizza_por_col(df_filtrado, "COORDENADOR", "Status por Coordenador"), use_container_width=True)
-
-# Tabela final com filtro
-st.markdown("### Dados Tratados")
-st.dataframe(df_filtrado, use_container_width=True)
