@@ -71,19 +71,18 @@ def gerar_download_excel(df):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📅 Baixar Excel Pendentes</a>'
     return href
 
-def aplicar_estilo_pendentes(df):
-    df = df.copy()
-    if "SALDO SGM TÉCNICO" in df.columns:
-        df["STATUS SALDO"] = df["SALDO SGM TÉCNICO"].apply(
-            lambda x: "❌ SEM SALDO DE EPI" if pd.isna(x) or (isinstance(x, str) and "não tem" in x.lower()) else "✅ OK"
-        )
-        def destaque(c):
-            return ['background-color: #fff3cd; font-weight: bold' if status == "❌ SEM SALDO DE EPI" else '' for status in c]
-        styled = df[["TÉCNICO", "COORDENADOR", "GERENTE", "SALDO SGM TÉCNICO", "STATUS SALDO"]].style.apply(
-            destaque, subset=["STATUS SALDO"]
-        )
-        return styled
-    return df
+# Função para status do saldo de EPI
+def status_saldo(x):
+    if pd.isna(x):
+        return "❌ SEM SALDO DE EPI"
+    elif isinstance(x, str) and "não tem" in x.lower():
+        return "❌ SEM SALDO DE EPI"
+    else:
+        return "✅ TEM SALDO DE EPI"
+
+# Estilo para destaque no saldo
+def destaque_saldo(s):
+    return ['background-color: #fff3cd; font-weight: bold' if v == "❌ SEM SALDO DE EPI" else '' for v in s]
 
 # Início do app
 df_raw = carregar_dados()
@@ -98,8 +97,13 @@ coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
 coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
 df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_filtrado_ger["COORDENADOR"].isin(coordenador_sel)]
 
-# Pendentes e botão de download
+# Pendentes
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
+
+# Coluna status saldo EPI
+df_pendentes["STATUS SALDO"] = df_pendentes["SALDO SGM TÉCNICO"].apply(status_saldo)
+
+# Botão download dos pendentes
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
 # KPIs principais
@@ -140,23 +144,13 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# KPI extra: funcionários sem EPI no saldo
-sem_epi = df_pendentes["SALDO SGM TÉCNICO"].isna().sum() + \
-    df_pendentes["SALDO SGM TÉCNICO"].astype(str).str.lower().str.contains("não tem").sum()
-st.markdown(f"""
-<div class="kpi-container">
-    <div class="kpi-box pending">
-        <div class="kpi-title">Funcionários sem EPI no saldo</div>
-        <div class="kpi-value">{sem_epi}</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# Tabela pendentes (sem FUNCAO_DESCRICAO)
-st.markdown("### Técnicos Pendentes de Inspeção")
+# Mostrar tabela pendentes com status saldo e destaque
+st.markdown("### Técnicos Pendentes de Inspeção com Status do Saldo de EPI")
 if df_pendentes.empty:
     st.success("Nenhum técnico pendente! 👏")
 else:
-    st.dataframe(df_pendentes[["TÉCNICO", "COORDENADOR", "GERENTE", "SALDO SGM TÉCNICO"]], use_container_width=True)
-    st.markdown("### Destaque de Técnicos Sem EPI no Saldo")
-    st.write(aplicar_estilo_pendentes(df_pendentes), unsafe_allow_html=True)
+    st.dataframe(
+        df_pendentes[["TÉCNICO", "COORDENADOR", "GERENTE", "SALDO SGM TÉCNICO", "STATUS SALDO"]],
+        use_container_width=True
+    )
+    st.write(df_pendentes.style.apply(destaque_saldo, subset=["STATUS SALDO"]), unsafe_allow_html=True)
