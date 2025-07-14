@@ -140,13 +140,8 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Mostrar tabela só dos pendentes com destaque no saldo
-st.markdown("### Técnicos Pendentes de Inspeção com Status do Saldo de EPI")
+# Mostrar tabela só dos pendentes com destaque no saldo (SEM REPETIÇÃO)
 if df_pendentes.empty:
     st.success("Nenhum técnico pendente! 👏")
 else:
-    st.dataframe(
-        df_pendentes[["TÉCNICO", "COORDENADOR", "GERENTE", "SALDO SGM TÉCNICO", "STATUS SALDO"]],
-        use_container_width=True
-    )
     st.write(df_pendentes.style.apply(destaque_saldo, subset=["STATUS SALDO"]), unsafe_allow_html=True)
