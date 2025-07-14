@@ -184,25 +184,23 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Tabela final limpa com AgGrid
+# Tabela final limpa com AgGrid - apenas colunas selecionadas
 st.markdown("### Técnicos Pendentes")
 df_pendentes_clean = df_pendentes.copy()
-df_pendentes_clean = df_pendentes_clean.fillna("").astype(str)
+df_pendentes_clean = df_pendentes_clean[["TÉCNICO", "FUNCAO_DESCRICAO", "SALDO SGM TÉCNICO", "SUPERVISOR"]].fillna("").astype(str)
 
 if "SALDO SGM TÉCNICO" not in df_pendentes_clean.columns:
     df_pendentes_clean["SALDO SGM TÉCNICO"] = ""
 
-gb = GridOptionsBuilder.from_dataframe(df_pendentes_clean)
-gb.configure_pagination(paginationAutoPageSize=True)
-gb.configure_default_column(wrapText=True, autoHeight=True)
-gridOptions = gb.build()
-
-AgGrid(
-    df_pendentes_clean,
-    gridOptions=gridOptions,
-    enable_enterprise_modules=False,
-    fit_columns_on_grid_load=True
-)
+# Estilo zebra para tabela visualmente mais bonita
+st.dataframe(df_pendentes_clean.style.set_properties(
+    **{
+        'background-color': '#fdfdfd',
+        'color': 'black',
+        'border-color': 'lightgray'
+    }
+).apply(lambda x: ['background-color: #f8d7da' if v == 'Não tem no saldo' else 'background-color: #fff3cd' for v in x]
+        if x.name == 'SALDO SGM TÉCNICO' else [''] * len(x), axis=1), use_container_width=True)
 
 # Botão de download
-st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
+st.markdown(gerar_download_excel(df_pendentes_clean), unsafe_allow_html=True)
