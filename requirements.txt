@@ -5,6 +5,9 @@ plotly>=5.0
 xlsxwriter
 streamlit-authenticator
 streamlit-aggrid
-
-
-
+streamlit
+streamlit-aggrid
+pandas
+plotly
+openpyxl
+numpy
