@@ -1,57 +1,22 @@
 import streamlit as st
 import pandas as pd
-import io
-import base64
 import plotly.express as px
 
-st.set_page_config(page_title="Inspeções EPI", layout="wide")
-
-# Cor de fundo Verde Menta Pastel
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background-color: #d0f0c0;
-    }
-    /* Botão de download piscando - texto branco e fundo azul forte */
-    @keyframes blink {
-      0% {opacity: 1;}
-      50% {opacity: 0.4;}
-      100% {opacity: 1;}
-    }
-    .download-btn {
-        font-size:18px; 
-        color:#ffffff !important; 
-        background-color:#005a9c; 
-        padding:10px 15px; 
-        border-radius:5px; 
-        text-decoration:none !important;
-        animation: blink 1.5s infinite;
-        display: inline-block;
-        margin-bottom: 20px;
-        font-weight: 700;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+st.set_page_config(page_title="Painel Inspeções EPI", layout="wide")
 
 @st.cache_data
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
-    
-    # Limpar espaços da coluna SALDO SGM TÉCNICO e garantir string
+    # Limpa e garante string na coluna saldo
     df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].astype(str).str.strip()
-    
     return df
 
 def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
     ultimas_por_tecnico = (
-        com_data
-        .sort_values("DATA_INSPECAO")
+        com_data.sort_values("DATA_INSPECAO")
         .drop_duplicates(subset=["TÉCNICO"], keep="last")
     )
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
@@ -60,14 +25,42 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
     resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
     return resultado
 
-def gerar_download_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Pendentes")
-    dados_excel = output.getvalue()
-    b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
-    return href
+def destacar_saldo(val):
+    val_lower = val.lower()
+    if "não tem no saldo" in val_lower or "nao tem no saldo" in val_lower:
+        return 'background-color: #f8d7da; color: #721c24;'  # vermelho clarinho
+    elif "tem no saldo" in val_lower:
+        return 'background-color: #fff3cd; color: #856404;'  # amarelo clarinho
+    else:
+        return ''
+
+st.title("🦺 Painel de Inspeções EPI")
+
+df_raw = carregar_dados()
+df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+
+# Filtros
+gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
+gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
+
+if gerente_sel != "-- Todos --":
+    df_filtrado_ger = df_tratado[df_tratado["GERENTE"] == gerente_sel]
+else:
+    df_filtrado_ger = df_tratado.copy()
+
+coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
+coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
+
+df_filtrado = df_filtrado_ger.copy()
+if coordenador_sel:
+    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
+
+# KPIs
+total = len(df_filtrado)
+pending = df_filtrado["DATA_INSPECAO"].isna().sum()
+ok = total - pending
+pct_ok = round(ok / total * 100, 1) if total > 0 else 0
+pct_pendente = round(100 - pct_ok, 1)
 
 kpi_css = """
 <style>
@@ -104,45 +97,6 @@ kpi_css = """
 }
 </style>
 """
-
-st.title("🦺 Painel de Inspeções EPI")
-
-df_raw = carregar_dados()
-
-# Diagnóstico: mostrar as colunas e as primeiras linhas com SALDO SGM TÉCNICO para garantir que está vindo
-st.write("### Colunas do DataFrame:")
-st.write(df_raw.columns.tolist())
-
-st.write("### Exemplo de dados (TÉCNICO e SALDO SGM TÉCNICO):")
-st.dataframe(df_raw[["TÉCNICO", "SALDO SGM TÉCNICO"]].head(10))
-
-df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
-
-gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
-gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
-
-if gerente_sel != "-- Todos --":
-    df_filtrado_ger = df_tratado[df_tratado["GERENTE"] == gerente_sel]
-else:
-    df_filtrado_ger = df_tratado.copy()
-
-coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
-coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
-
-df_filtrado = df_filtrado_ger.copy()
-if coordenador_sel:
-    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
-
-df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
-
-st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
-
-total = len(df_filtrado)
-pending = df_filtrado["DATA_INSPECAO"].isna().sum()
-ok = total - pending
-pct_ok = round(ok / total * 100, 1) if total > 0 else 0
-pct_pendente = round(100 - pct_ok, 1)
-
 st.markdown(kpi_css, unsafe_allow_html=True)
 
 kpis_html = f"""
@@ -165,9 +119,9 @@ kpis_html = f"""
     </div>
 </div>
 """
-
 st.markdown(kpis_html, unsafe_allow_html=True)
 
+# Gráfico por coordenador
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
         lambda x: pd.Series({
@@ -199,19 +153,10 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# ===== Tabela final com destaque na coluna SALDO SGM TÉCNICO =====
-
-colunas_final = ["TÉCNICO", "SUPERVISOR", "SALDO SGM TÉCNICO"]
-df_pendentes_clean = df_pendentes[colunas_final].fillna("").astype(str)
-
-def destacar_saldo(val):
-    val_lower = val.lower()
-    if "Não tem no saldo" in val_lower:
-        return 'background-color: #f8d7da; color: #721c24;'  # vermelho clarinho
-    elif "Tem no saldo" in val_lower:
-        return 'background-color: #fff3cd; color: #856404;'  # amarelo clarinho
-    else:
-        return ''
+# Tabela dos pendentes com destaque no saldo
+df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
+colunas_tabela = ["TÉCNICO", "SUPERVISOR", "SALDO SGM TÉCNICO"]
+df_pendentes_clean = df_pendentes[colunas_tabela].fillna("").astype(str)
 
 st.markdown("### Técnicos Pendentes com Status do Saldo SGM")
 st.write(
