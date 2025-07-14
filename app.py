@@ -6,7 +6,6 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# Estilo geral do app
 st.markdown("""
 <style>
 .stApp { background-color: #d0f0c0; }
@@ -65,10 +64,10 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
 def gerar_download_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Dados")
+        df.to_excel(writer, index=False, sheet_name="Pendentes")
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_epi.xlsx" class="download-btn">📥 Baixar Excel Completo</a>'
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📅 Baixar Excel Pendentes</a>'
     return href
 
 def status_saldo(x):
@@ -79,18 +78,13 @@ def status_saldo(x):
     else:
         return "✅ TEM SALDO DE EPI"
 
-def status_inspecao(row):
-    if pd.isna(row["DATA_INSPECAO"]):
-        return "Pendente"
-    else:
-        return "OK"
-
 def destaque_saldo(s):
     return ['background-color: #fff3cd; font-weight: bold' if v == "❌ SEM SALDO DE EPI" else '' for v in s]
 
-# Início do app
+# Carregar e tratar dados
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+
 st.title("Painel de Inspeções EPI")
 
 # Filtros
@@ -101,16 +95,16 @@ coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
 coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
 df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_filtrado_ger["COORDENADOR"].isin(coordenador_sel)]
 
-# Adiciona colunas de status
-df_filtrado["STATUS INSPECAO"] = df_filtrado.apply(status_inspecao, axis=1)
-df_filtrado["STATUS SALDO"] = df_filtrado["SALDO SGM TÉCNICO"].apply(status_saldo)
+# Pendentes
+df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
+df_pendentes["STATUS SALDO"] = df_pendentes["SALDO SGM TÉCNICO"].apply(status_saldo)
 
-# Botão para download do dataset filtrado completo
-st.markdown(gerar_download_excel(df_filtrado), unsafe_allow_html=True)
+# Botão para baixar pendentes
+st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
 # KPIs
 total = len(df_filtrado)
-pending = (df_filtrado["STATUS INSPECAO"] == "Pendente").sum()
+pending = df_filtrado["DATA_INSPECAO"].isna().sum()
 ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
@@ -128,8 +122,8 @@ st.markdown(f"""
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
         lambda x: pd.Series({
-            "OK": (x["STATUS INSPECAO"] == "OK").sum(),
-            "Pendentes": (x["STATUS INSPECAO"] == "Pendente").sum(),
+            "OK": x["DATA_INSPECAO"].notna().sum(),
+            "Pendentes": x["DATA_INSPECAO"].isna().sum(),
             "Total": len(x)
         })
     ).reset_index()
@@ -138,7 +132,7 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_melt = df_status_coord.melt(id_vars="COORDENADOR", value_vars=["% OK", "% Pendentes"], var_name="Status", value_name="Percentual")
     fig = px.bar(df_melt, x="COORDENADOR", y="Percentual", color="Status",
                  color_discrete_map={"% OK": "#27ae60", "% Pendentes": "#f39c12"},
-                 text="Percentual", title="📊 Percentual de Inspeções por Coordenador",
+                 text="Percentual", title="Percentual de Inspeções por Coordenador",
                  labels={"COORDENADOR": "Coordenador", "Percentual": "%"})
     fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis_range=[0, 100])
     fig.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
@@ -146,13 +140,13 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Mostrar tabela completa com destaque para saldo
-st.markdown("### Técnicos com status de inspeção e saldo de EPI")
-if df_filtrado.empty:
-    st.success("Nenhum técnico encontrado! 👏")
+# Mostrar tabela só dos pendentes com destaque no saldo
+st.markdown("### Técnicos Pendentes de Inspeção com Status do Saldo de EPI")
+if df_pendentes.empty:
+    st.success("Nenhum técnico pendente! 👏")
 else:
     st.dataframe(
-        df_filtrado[["TÉCNICO", "COORDENADOR", "GERENTE", "DATA_INSPECAO", "STATUS INSPECAO", "SALDO SGM TÉCNICO", "STATUS SALDO"]],
+        df_pendentes[["TÉCNICO", "COORDENADOR", "GERENTE", "SALDO SGM TÉCNICO", "STATUS SALDO"]],
         use_container_width=True
     )
-    st.write(df_filtrado.style.apply(destaque_saldo, subset=["STATUS SALDO"]), unsafe_allow_html=True)
+    st.write(df_pendentes.style.apply(destaque_saldo, subset=["STATUS SALDO"]), unsafe_allow_html=True)
