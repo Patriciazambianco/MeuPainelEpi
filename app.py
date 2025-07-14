@@ -115,10 +115,10 @@ function(params) {
 };
 """)
 
+st.title("🦺 Painel de Inspeções EPI")
+
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
-
-st.title("🦺 Painel de Inspeções EPI")
 
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
 gerente_sel = st.selectbox("🔎 Filtrar por Gerente", ["-- Todos --"] + gerentes)
@@ -171,8 +171,19 @@ else:
 if df_pendentes.empty:
     st.success("🎉 Nenhum técnico pendente! Parabéns! 👏")
 else:
-    gb = GridOptionsBuilder.from_dataframe(df_pendentes)
+    # Tratamento para evitar erros no AgGrid
+    df_pendentes_clean = df_pendentes.fillna('')
+    for col in df_pendentes_clean.columns:
+        df_pendentes_clean[col] = df_pendentes_clean[col].astype(str)
+
+    gb = GridOptionsBuilder.from_dataframe(df_pendentes_clean)
     gb.configure_default_column(autoHeight=True, wrapText=True)
     gb.configure_column("SALDO SGM TÉCNICO", cellStyle=cellStyle_jscode)
     gridOptions = gb.build()
-    AgGrid(df_pendentes, gridOptions=gridOptions, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
+
+    AgGrid(
+        df_pendentes_clean,
+        gridOptions=gridOptions,
+        enable_enterprise_modules=False,
+        fit_columns_on_grid_load=True
+    )
