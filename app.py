@@ -9,7 +9,6 @@ st.set_page_config(page_title="Painel Inspeções EPI", layout="wide")
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
-    # Ajusta texto em SALDO SGM TÉCNICO e trata valores vazios
     df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].astype(str).str.strip()
     df.loc[df["SALDO SGM TÉCNICO"].isin(["", "nan", "NaN"]), "SALDO SGM TÉCNICO"] = "Não tem no saldo"
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
@@ -25,7 +24,7 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
-# --- FILTROS ---
+# Filtros
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
 gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
 df_filtrado_ger = df_tratado[df_tratado["GERENTE"] == gerente_sel] if gerente_sel != "-- Todos --" else df_tratado.copy()
@@ -34,10 +33,9 @@ coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
 coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
 df_filtrado = df_filtrado_ger[df_filtrado_ger["COORDENADOR"].isin(coordenador_sel)] if coordenador_sel else df_filtrado_ger.copy()
 
-# --- FILTRA OS PENDENTES (SEM DATA DE INSPEÇÃO) ---
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
 
-# --- KPIs ---
+# KPIs
 total = len(df_filtrado)
 pendentes = len(df_pendentes)
 ok = total - pendentes
@@ -45,14 +43,13 @@ pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendentes = round(100 - pct_ok, 1)
 
 st.title("🦺 Painel de Inspeções EPI")
-
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Inspeções OK", ok)
 col2.metric("Pendentes", pendentes)
 col3.metric("% OK", f"{pct_ok}%")
 col4.metric("% Pendentes", f"{pct_pendentes}%")
 
-# --- GRÁFICO POR COORDENADOR ---
+# Gráfico por coordenador (OK x Pendentes)
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
         lambda x: pd.Series({
@@ -78,29 +75,28 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
         title="Percentual das Inspeções por Coordenador",
         text="Percentual"
     )
-    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0,100]))
+    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0, 100]))
     fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# --- TABELA INTERATIVA DOS PENDENTES ---
+# Tabela Pendentes com destaque na coluna SALDO SGM TÉCNICO
 st.markdown("### Técnicos Pendentes")
 
 colunas_exibir = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SUPERVISOR", "SALDO SGM TÉCNICO"]
 df_pendentes_display = df_pendentes[colunas_exibir].fillna("")
 
-# JS para colorir a coluna SALDO SGM TÉCNICO
-cell_style_jscode = JsCode("""
+js_code = """
 function(params) {
-    if(params.value.toLowerCase().includes('não tem no saldo') || params.value.toLowerCase().includes('nao tem no saldo')){
+    if (params.value && params.value.toLowerCase().includes('não tem no saldo') || params.value.toLowerCase().includes('nao tem no saldo')) {
         return {
             'color': '#721c24',
             'backgroundColor': '#f8d7da',
             'fontWeight': 'bold'
         }
     }
-    if(params.value.toLowerCase().includes('tem no saldo')){
+    if (params.value && params.value.toLowerCase().includes('tem no saldo')) {
         return {
             'color': '#856404',
             'backgroundColor': '#fff3cd',
@@ -108,11 +104,11 @@ function(params) {
         }
     }
     return null;
-};
-""")
+}
+"""
 
 grid_builder = GridOptionsBuilder.from_dataframe(df_pendentes_display)
-grid_builder.configure_columns(["SALDO SGM TÉCNICO"], cellStyle=cell_style_jscode)
+grid_builder.configure_column("SALDO SGM TÉCNICO", cellStyle=JsCode(js_code))
 gridOptions = grid_builder.build()
 
 AgGrid(
