@@ -40,6 +40,10 @@ st.markdown(
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
+    
+    # Limpar espaços da coluna SALDO SGM TÉCNICO e garantir string
+    df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].astype(str).str.strip()
+    
     return df
 
 def filtrar_ultimas_inspecoes_por_tecnico(df):
@@ -104,6 +108,14 @@ kpi_css = """
 st.title("🦺 Painel de Inspeções EPI")
 
 df_raw = carregar_dados()
+
+# Diagnóstico: mostrar as colunas e as primeiras linhas com SALDO SGM TÉCNICO para garantir que está vindo
+st.write("### Colunas do DataFrame:")
+st.write(df_raw.columns.tolist())
+
+st.write("### Exemplo de dados (TÉCNICO e SALDO SGM TÉCNICO):")
+st.dataframe(df_raw[["TÉCNICO", "SALDO SGM TÉCNICO"]].head(10))
+
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
@@ -189,19 +201,14 @@ else:
 
 # ===== Tabela final com destaque na coluna SALDO SGM TÉCNICO =====
 
-# Seleciona colunas e limpa NaNs
 colunas_final = ["TÉCNICO", "SUPERVISOR", "SALDO SGM TÉCNICO"]
 df_pendentes_clean = df_pendentes[colunas_final].fillna("").astype(str)
 
-# Limpa espaços
-df_pendentes_clean["SALDO SGM TÉCNICO"] = df_pendentes_clean["SALDO SGM TÉCNICO"].str.strip()
-
-# Função para destacar
 def destacar_saldo(val):
     val_lower = val.lower()
-    if "não tem no saldo" in val_lower:
+    if "Não tem no saldo" in val_lower:
         return 'background-color: #f8d7da; color: #721c24;'  # vermelho clarinho
-    elif "tem no saldo" in val_lower:
+    elif "Tem no saldo" in val_lower:
         return 'background-color: #fff3cd; color: #856404;'  # amarelo clarinho
     else:
         return ''
