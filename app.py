@@ -13,7 +13,6 @@ st.markdown(
     .stApp {
         background-color: #d0f0c0;
     }
-    /* Botão de download piscando - texto branco e fundo azul forte */
     @keyframes blink {
       0% {opacity: 1;}
       50% {opacity: 0.4;}
@@ -44,20 +43,16 @@ def carregar_dados():
 
 def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
-
     com_data = df[df["DATA_INSPECAO"].notna()]
     ultimas_por_tecnico = (
         com_data
         .sort_values("DATA_INSPECAO")
         .drop_duplicates(subset=["TÉCNICO"], keep="last")
     )
-
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
     sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
-
     resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
-
     return resultado
 
 def gerar_download_excel(df):
@@ -69,12 +64,7 @@ def gerar_download_excel(df):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-# Função para destacar saldo
-def destacar_saldo(celula):
-    if celula == "FUNCIONÁRIO SEM SALDO DE EPI":
-        return "background-color: #fff3cd"  # amarelo clarinho
-    return ""
-
+# CSS para os KPIs
 kpi_css = """
 <style>
 .kpi-container {
@@ -111,17 +101,16 @@ kpi_css = """
 </style>
 """
 
+# Função para destacar a célula com cor se estiver "sem saldo"
+def destacar_saldo(celula):
+    if celula == "FUNCIONÁRIO SEM SALDO DE EPI":
+        return "background-color: #fff3cd"  # amarelo claro
+    return ""
+
 st.title("🦺 Painel de Inspeções EPI")
 
 df_raw = carregar_dados()
-
-# Substituir valores vazios na coluna "SALDO SGM TÉCNICO"
-df_raw["SALDO SGM TÉCNICO"] = df_raw["SALDO SGM TÉCNICO"].fillna("FUNCIONÁRIO SEM SALDO DE EPI")
-
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
-
-# Também aplicar a substituição na base tratada (por segurança)
-df_tratado["SALDO SGM TÉCNICO"] = df_tratado["SALDO SGM TÉCNICO"].fillna("FUNCIONÁRIO SEM SALDO DE EPI")
 
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
 gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
@@ -203,9 +192,14 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Estilizar tabela de pendentes com cor na coluna de saldo
-df_pendentes_estilizado = df_pendentes.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
-
-st.markdown("### Pendentes")
-st.write(df_pendentes_estilizado, unsafe_allow_html=True)
-
+# Substituir valores da coluna SALDO SGM TÉCNICO para visualização
+df_pendentes_visivel = df_pendentes.copy()
+if "SALDO SGM TÉCNICO" in df_pendentes_visivel.columns:
+    df_pendentes_visivel["SALDO SGM TÉCNICO"] = df_pendentes_visivel["SALDO SGM TÉCNICO"].apply(
+        lambda x: "TEM NO SALDO" if pd.notna(x) else "FUNCIONÁRIO SEM SALDO DE EPI"
+    )
+    df_pendentes_estilizado = df_pendentes_visivel.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
+    st.markdown("### Pendentes")
+    st.write(df_pendentes_estilizado, unsafe_allow_html=True)
+else:
+    st.warning("⚠️ A coluna 'SALDO SGM TÉCNICO' não foi encontrada no arquivo.")
