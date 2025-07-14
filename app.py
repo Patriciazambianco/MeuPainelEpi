@@ -80,7 +80,7 @@ def gerar_download_excel(df):
         for row_num, val in enumerate(df["SALDO SGM TÉCNICO"], start=1):
             if val.strip().lower() == "tem no saldo":
                 worksheet.write(row_num, col_idx, val, formato_tem)
-            elif val.strip().lower() == "não tem no saldo" or val.strip().lower() == "nao tem no saldo":
+            elif val.strip().lower() in ["não tem no saldo", "nao tem no saldo"]:
                 worksheet.write(row_num, col_idx, val, formato_nao_tem)
             else:
                 worksheet.write(row_num, col_idx, val)
@@ -90,14 +90,14 @@ def gerar_download_excel(df):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-def destaque_saldo(val):
-    if isinstance(val, str):
-        v = val.lower().strip()
-        if v == "tem no saldo":
-            return "background-color:#fce5cd; color:#b26a00; font-weight:bold;"
-        elif v == "não tem no saldo" or v == "nao tem no saldo":
-            return "background-color:#f8d7da; color:#842029; font-weight:bold;"
-    return ""
+def color_saldo(val):
+    val_lower = str(val).strip().lower()
+    if val_lower == "tem no saldo":
+        return 'background-color: #fce5cd; color: #b26a00; font-weight: bold;'
+    elif val_lower in ["não tem no saldo", "nao tem no saldo"]:
+        return 'background-color: #f8d7da; color: #842029; font-weight: bold;'
+    else:
+        return ''
 
 st.title("🦺 Painel de Inspeções EPI")
 
@@ -211,36 +211,4 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
     fig = px.bar(
         df_melt,
         x="COORDENADOR",
-        y="Percentual",
-        color="Status",
-        color_discrete_map={"% OK": "#27ae60", "% Pendentes": "#f39c12"},
-        title="% Inspeções por Coordenador",
-        labels={"Percentual": "% das Inspeções", "COORDENADOR": "Coordenador"},
-        barmode="stack",
-        text="Percentual",
-    )
-    fig.update_traces(texttemplate='%{text}%', textposition='inside')
-    fig.update_layout(yaxis=dict(range=[0, 100]), uniformtext_minsize=8, uniformtext_mode='hide')
-
-    st.plotly_chart(fig, use_container_width=True)
-
-else:
-    st.info("Selecione um gerente e coordenador para visualizar o gráfico.")
-
-# Mostrar tabela pendentes com destaque na coluna saldo
-
-def color_saldo(val):
-    val_lower = str(val).strip().lower()
-    if val_lower == "tem no saldo":
-        return 'background-color: #fce5cd; color: #b26a00; font-weight: bold;'
-    elif val_lower == "não tem no saldo" or val_lower == "nao tem no saldo":
-        return 'background-color: #f8d7da; color: #842029; font-weight: bold;'
-    else:
-        return ''
-
-colunas_exibir = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SALDO SGM TÉCNICO", "SUPERVISOR"]
-
-df_pendentes_display = df_pendentes[colunas_exibir].fillna("").astype(str)
-
-st.write("### Técnicos Pendentes e Saldo SGM Técnico")
-st.dataframe(df_pendentes_display.style.applymap(color_saldo, subset=["SALDO SGM TÉCNICO"]).hide_index(), use_container_width=True)
+        y="
