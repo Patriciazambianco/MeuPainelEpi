@@ -4,18 +4,25 @@ import io
 import base64
 import plotly.express as px
 
-st.set_page_config(page_title="Painel EPI", layout="wide")
+st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# Cor de fundo
-st.markdown("""
-<style>
+# Cor de fundo Verde Menta Pastel
+st.markdown(
+    """
+    <style>
     .stApp {
-        background-color: #e8f5e9;
+        background-color: #d0f0c0;
+    }
+    /* Botão de download piscando - texto branco e fundo azul forte */
+    @keyframes blink {
+      0% {opacity: 1;}
+      50% {opacity: 0.4;}
+      100% {opacity: 1;}
     }
     .download-btn {
         font-size:18px; 
         color:#ffffff !important; 
-        background-color:#2e7d32; 
+        background-color:#005a9c; 
         padding:10px 15px; 
         border-radius:5px; 
         text-decoration:none !important;
@@ -24,16 +31,12 @@ st.markdown("""
         margin-bottom: 20px;
         font-weight: 700;
     }
-    @keyframes blink {
-      0% {opacity: 1;}
-      50% {opacity: 0.4;}
-      100% {opacity: 1;}
-    }
-</style>
-""", unsafe_allow_html=True)
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 @st.cache_data
-
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
@@ -42,7 +45,11 @@ def carregar_dados():
 def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
-    ultimas_por_tecnico = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
+    ultimas_por_tecnico = (
+        com_data
+        .sort_values("DATA_INSPECAO")
+        .drop_duplicates(subset=["TÉCNICO"], keep="last")
+    )
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
     sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
@@ -57,6 +64,42 @@ def gerar_download_excel(df):
     b64 = base64.b64encode(dados_excel).decode()
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
+
+kpi_css = """
+<style>
+.kpi-container {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.kpi-box {
+    background-color: #007acc;
+    color: white;
+    border-radius: 10px;
+    padding: 20px 30px;
+    flex: 1;
+    text-align: center;
+    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.kpi-box.pending {
+    background-color: #f39c12;
+}
+.kpi-box.percent {
+    background-color: #27ae60;
+}
+.kpi-title {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+.kpi-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+</style>
+"""
 
 st.title("🦺 Painel de Inspeções EPI")
 
@@ -88,31 +131,9 @@ ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
 
-st.markdown("""
-<style>
-.kpi-container {
-    display: flex;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-.kpi-box {
-    background-color: #007acc;
-    color: white;
-    border-radius: 10px;
-    padding: 20px 30px;
-    flex: 1;
-    text-align: center;
-    font-weight: bold;
-    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
-}
-.kpi-box.pending { background-color: #f39c12; }
-.kpi-box.percent { background-color: #27ae60; }
-.kpi-title { font-size: 1.1rem; margin-bottom: 0.5rem; }
-.kpi-value { font-size: 2.5rem; }
-</style>
-""", unsafe_allow_html=True)
+st.markdown(kpi_css, unsafe_allow_html=True)
 
-st.markdown(f"""
+kpis_html = f"""
 <div class="kpi-container">
     <div class="kpi-box percent">
         <div class="kpi-title">Inspeções OK</div>
@@ -131,7 +152,9 @@ st.markdown(f"""
         <div class="kpi-value">{pct_pendente}%</div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(kpis_html, unsafe_allow_html=True)
 
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
@@ -158,23 +181,34 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
         title="Percentual das Inspeções por Coordenador",
         text="Percentual"
     )
-    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0, 100]))
+    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0,100]))
     fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Tabela final destacada
-st.markdown("### 👷 Técnicos Pendentes com Status de Saldo de EPI")
+# ===== Tabela final com destaque na coluna SALDO SGM TÉCNICO =====
 
-colunas = ["TÉCNICO", "SUPERVISOR", "SALDO SGM TÉCNICO"]
-df_pendentes_clean = df_pendentes[colunas].fillna("").astype(str)
+# Seleciona colunas e limpa NaNs
+colunas_final = ["TÉCNICO", "SUPERVISOR", "SALDO SGM TÉCNICO"]
+df_pendentes_clean = df_pendentes[colunas_final].fillna("").astype(str)
 
+# Limpa espaços
+df_pendentes_clean["SALDO SGM TÉCNICO"] = df_pendentes_clean["SALDO SGM TÉCNICO"].str.strip()
+
+# Função para destacar
 def destacar_saldo(val):
-    if "não" in val.lower():
-        return 'background-color: #f8d7da; color: #721c24;'
-    elif "tem" in val.lower():
-        return 'background-color: #fff3cd; color: #856404;'
-    return ''
+    val_lower = val.lower()
+    if "não tem no saldo" in val_lower:
+        return 'background-color: #f8d7da; color: #721c24;'  # vermelho clarinho
+    elif "tem no saldo" in val_lower:
+        return 'background-color: #fff3cd; color: #856404;'  # amarelo clarinho
+    else:
+        return ''
 
-st.write(df_pendentes_clean.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"]).hide(axis="index"))
+st.markdown("### Técnicos Pendentes com Status do Saldo SGM")
+st.write(
+    df_pendentes_clean.style
+    .applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
+    .hide(axis="index")
+)
