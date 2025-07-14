@@ -201,11 +201,30 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_melt = df_status_coord.melt(id_vars="COORDENADOR", value_vars=["% OK", "% Pendentes"],
                                    var_name="Status", value_name="Percentual")
 
-    fig = px.bar(
+        fig = px.bar(
         df_melt,
         x="COORDENADOR",
         y="Percentual",
         color="Status",
         color_discrete_map={"% OK": "#27ae60", "% Pendentes": "#f39c12"},
-        labels={"Percentual": "% das Inspeções", "Status": "Status", "
+        labels={"Percentual": "% das Inspeções", "Status": "Status", "COORDENADOR": "Coordenador"},
+        title="Percentual das Inspeções por Coordenador",
+        text="Percentual"
+    )
+    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0, 100]))
+    fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
+# Substituir valores da coluna SALDO SGM TÉCNICO para visualização
+df_pendentes_visivel = df_pendentes.copy()
+if "SALDO SGM TÉCNICO" in df_pendentes_visivel.columns:
+    df_pendentes_visivel["SALDO SGM TÉCNICO"] = df_pendentes_visivel["SALDO SGM TÉCNICO"].apply(
+        lambda x: "TEM NO SALDO" if pd.notna(x) else "FUNCIONÁRIO SEM SALDO DE EPI"
+    )
+    df_pendentes_estilizado = df_pendentes_visivel.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
+    st.markdown("### Pendentes")
+    st.write(df_pendentes_estilizado, unsafe_allow_html=True)
+else:
+    st.warning("⚠️ A coluna 'SALDO SGM TÉCNICO' não foi encontrada no arquivo.")
