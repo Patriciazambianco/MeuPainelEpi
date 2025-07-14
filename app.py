@@ -1,36 +1,8 @@
 import streamlit as st
 import pandas as pd
-import io
-import base64
 import plotly.express as px
 
-st.set_page_config(page_title="Inspeções EPI", layout="wide")
-
-st.markdown(
-    """
-    <style>
-    .stApp { background-color: #d0f0c0; }
-    @keyframes blink {
-      0% {opacity: 1;}
-      50% {opacity: 0.4;}
-      100% {opacity: 1;}
-    }
-    .download-btn {
-        font-size:18px; 
-        color:#ffffff !important; 
-        background-color:#005a9c; 
-        padding:10px 15px; 
-        border-radius:5px; 
-        text-decoration:none !important;
-        animation: blink 1.5s infinite;
-        display: inline-block;
-        margin-bottom: 20px;
-        font-weight: 700;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+st.set_page_config(layout="wide")
 
 @st.cache_data
 def carregar_dados():
@@ -47,199 +19,59 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
     sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
-    resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
-    return resultado
+    return pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
 
-def gerar_download_excel(df):
-    df_export = df.copy()
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df_export.to_excel(writer, index=False, sheet_name="Pendentes")
-        workbook  = writer.book
-        worksheet = writer.sheets["Pendentes"]
-
-        format_amarelo = workbook.add_format({'bg_color': '#fff3cd'})
-
-        try:
-            col_idx = df_export.columns.get_loc("SALDO SGM TÉCNICO")
-        except KeyError:
-            col_idx = None
-
-        if col_idx is not None:
-            worksheet.conditional_format(1, col_idx, len(df_export), col_idx, {
-                'type': 'text',
-                'criteria': 'containing',
-                'value': 'não tem no saldo',
-                'format': format_amarelo
-            })
-
-    dados_excel = output.getvalue()
-    b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
-    return href
-
-kpi_css = """
-<style>
-.kpi-container {
-    display: flex;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-.kpi-box {
-    background-color: #007acc;
-    color: white;
-    border-radius: 10px;
-    padding: 20px 30px;
-    flex: 1;
-    text-align: center;
-    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-.kpi-box.pending {
-    background-color: #f39c12;
-}
-.kpi-box.percent {
-    background-color: #27ae60;
-}
-.kpi-title {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-}
-.kpi-value {
-    font-size: 2.5rem;
-    font-weight: 700;
-    line-height: 1;
-}
-</style>
-"""
-
-def destacar_saldo(celula):
-    if isinstance(celula, str) and "não tem no saldo" in celula.lower():
-        return "background-color: #fff3cd"  # amarelo clarinho
-    return ""
-
-st.title("🦺 Painel de Inspeções EPI")
-
+# Load e preparar dados
 df_raw = carregar_dados()
-df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+df = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
-gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
-gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
-
-if gerente_sel != "-- Todos --":
-    df_filtrado_ger = df_tratado[df_tratado["GERENTE"] == gerente_sel]
-else:
-    df_filtrado_ger = df_tratado.copy()
-
-coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
-coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
-
-df_filtrado = df_filtrado_ger.copy()
-if coordenador_sel:
-    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
-
-df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
-
-st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
-
-total = len(df_filtrado)
-pending = df_filtrado["DATA_INSPECAO"].isna().sum()
-ok = total - pending
-pct_ok = round(ok / total * 100, 1) if total > 0 else 0
-pct_pendente = round(100 - pct_ok, 1)
-
-st.markdown(kpi_css, unsafe_allow_html=True)
-
-kpis_html = f"""
-<div class="kpi-container">
-    <div class="kpi-box percent">
-        <div class="kpi-title">Inspeções OK</div>
-        <div class="kpi-value">{ok}</div>
-    </div>
-    <div class="kpi-box pending">
-        <div class="kpi-title">Pendentes</div>
-        <div class="kpi-value">{pending}</div>
-    </div>
-    <div class="kpi-box percent">
-        <div class="kpi-title">% OK</div>
-        <div class="kpi-value">{pct_ok}%</div>
-    </div>
-    <div class="kpi-box pending">
-        <div class="kpi-title">% Pendentes</div>
-        <div class="kpi-value">{pct_pendente}%</div>
-    </div>
-</div>
-"""
-st.markdown(kpis_html, unsafe_allow_html=True)
-
-# Marca técnicos sem EPI
-df_filtrado["SEM EPI"] = df_filtrado["SALDO SGM TÉCNICO"].apply(
+# Criar flag SEM EPI
+df["SEM EPI"] = df["SALDO SGM TÉCNICO"].apply(
     lambda x: 1 if isinstance(x, str) and "não tem no saldo" in x.lower() else 0
 )
 
-# DEBUG: veja valores únicos da coluna SALDO SGM e flag SEM EPI
-st.write("### Valores únicos de SALDO SGM TÉCNICO com flag SEM EPI")
-st.write(df_filtrado[["SALDO SGM TÉCNICO", "SEM EPI"]].drop_duplicates())
+# Agrupar por coordenador e calcular os %s
+df_status = df.groupby("COORDENADOR").apply(lambda x: pd.Series({
+    "OK": x["DATA_INSPECAO"].notna().sum(),
+    "Pendentes": x["DATA_INSPECAO"].isna().sum(),
+    "Sem EPI": x["SEM EPI"].sum(),
+    "Total": len(x)
+})).reset_index()
 
-# Estatísticas por coordenador
-df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
-    lambda x: pd.Series({
-        "Pendentes": x["DATA_INSPECAO"].isna().sum(),
-        "OK": x["DATA_INSPECAO"].notna().sum(),
-        "Sem EPI": x["SEM EPI"].sum(),
-        "Total": len(x)
-    })
-).reset_index()
+df_status["% OK"] = (df_status["OK"] / df_status["Total"] * 100).round(1)
+df_status["% Pendentes"] = (df_status["Pendentes"] / df_status["Total"] * 100).round(1)
+df_status["% Sem EPI"] = (df_status["Sem EPI"] / df_status["Total"] * 100).round(1)
 
-# DEBUG: resumo por coordenador
-st.write("### Resumo por Coordenador")
-st.write(df_status_coord[["COORDENADOR", "Pendentes", "OK", "Sem EPI", "Total"]])
-
-df_status_coord["% OK"] = (df_status_coord["OK"] / df_status_coord["Total"] * 100).round(1)
-df_status_coord["% Pendentes"] = (df_status_coord["Pendentes"] / df_status_coord["Total"] * 100).round(1)
-df_status_coord["% Sem EPI"] = (df_status_coord["Sem EPI"] / df_status_coord["Total"] * 100).round(1)
-
-df_melt = df_status_coord.melt(
+# Derreter os dados para gráfico empilhado
+df_melt = df_status.melt(
     id_vars="COORDENADOR",
     value_vars=["% OK", "% Pendentes", "% Sem EPI"],
     var_name="Status",
     value_name="Percentual"
 )
 
-# DEBUG: Status únicos antes do gráfico
-st.write("### Status únicos em df_melt")
-st.write(df_melt["Status"].unique())
+# Garantir nomes limpos
+df_melt["Status"] = df_melt["Status"].str.strip()
 
-cores_status = {
+# Cores
+cores = {
     "% OK": "#27ae60",
     "% Pendentes": "#f39c12",
     "% Sem EPI": "#e74c3c"
 }
 
+# Gráfico
 fig = px.bar(
     df_melt,
     x="COORDENADOR",
     y="Percentual",
     color="Status",
-    color_discrete_map=cores_status,
-    labels={"Percentual": "% das Inspeções / Técnicos", "Status": "Status", "COORDENADOR": "Coordenador"},
-    title="Percentual das Inspeções e Técnicos sem EPI por Coordenador",
-    text="Percentual"
+    color_discrete_map=cores,
+    text="Percentual",
+    title="📊 Inspeções e Técnicos sem EPI por Coordenador",
+    labels={"COORDENADOR": "Coordenador", "Percentual": "%"}
 )
-fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0, 100]))
-fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis_range=[0, 100])
+fig.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
+
 st.plotly_chart(fig, use_container_width=True)
-
-# Estiliza pendentes com destaque na coluna SALDO SGM TÉCNICO
-def destacar_saldo(celula):
-    if isinstance(celula, str) and "não tem no saldo" in celula.lower():
-        return "background-color: #fff3cd"
-    return ""
-
-if "SALDO SGM TÉCNICO" in df_pendentes.columns:
-    df_pendentes_estilizado = df_pendentes.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
-    st.markdown("### Pendentes")
-    st.write(df_pendentes_estilizado, unsafe_allow_html=True)
-else:
-    st.warning("⚠️ A coluna 'SALDO SGM TÉCNICO' não foi encontrada no arquivo.")
