@@ -4,4 +4,6 @@ openpyxl>=3.1
 plotly>=5.0
 xlsxwriter
 streamlit-authenticator
+pip install streamlit-aggrid
+
 
