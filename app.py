@@ -46,7 +46,6 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
     com_data = df[df["DATA_INSPECAO"].notna()]
-
     ultimas_por_tecnico = (
         com_data
         .sort_values("DATA_INSPECAO")
@@ -55,7 +54,6 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
 
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
-
     sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
 
     resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
@@ -70,6 +68,12 @@ def gerar_download_excel(df):
     b64 = base64.b64encode(dados_excel).decode()
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
+
+# Função para destacar saldo
+def destacar_saldo(celula):
+    if celula == "FUNCIONÁRIO SEM SALDO DE EPI":
+        return "background-color: #fff3cd"  # amarelo clarinho
+    return ""
 
 kpi_css = """
 <style>
@@ -110,7 +114,14 @@ kpi_css = """
 st.title("🦺 Painel de Inspeções EPI")
 
 df_raw = carregar_dados()
+
+# Substituir valores vazios na coluna "SALDO SGM TÉCNICO"
+df_raw["SALDO SGM TÉCNICO"] = df_raw["SALDO SGM TÉCNICO"].fillna("FUNCIONÁRIO SEM SALDO DE EPI")
+
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+
+# Também aplicar a substituição na base tratada (por segurança)
+df_tratado["SALDO SGM TÉCNICO"] = df_tratado["SALDO SGM TÉCNICO"].fillna("FUNCIONÁRIO SEM SALDO DE EPI")
 
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
 gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
@@ -159,7 +170,6 @@ kpis_html = f"""
     </div>
 </div>
 """
-
 st.markdown(kpis_html, unsafe_allow_html=True)
 
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
@@ -170,14 +180,12 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
         })
     ).reset_index()
 
-    # Calcular porcentagem para cada coordenador
     df_status_coord["Total"] = df_status_coord["OK"] + df_status_coord["Pendentes"]
     df_status_coord["% OK"] = (df_status_coord["OK"] / df_status_coord["Total"] * 100).round(1)
     df_status_coord["% Pendentes"] = (df_status_coord["Pendentes"] / df_status_coord["Total"] * 100).round(1)
 
-    # Preparar dados para gráfico de barras com % OK e % Pendentes
     df_melt = df_status_coord.melt(id_vars="COORDENADOR", value_vars=["% OK", "% Pendentes"],
-                                  var_name="Status", value_name="Percentual")
+                                   var_name="Status", value_name="Percentual")
 
     fig = px.bar(
         df_melt,
@@ -189,11 +197,15 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
         title="Percentual das Inspeções por Coordenador",
         text="Percentual"
     )
-    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0,100]))
+    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0, 100]))
     fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
-    
+
+# Estilizar tabela de pendentes com cor na coluna de saldo
+df_pendentes_estilizado = df_pendentes.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
+
 st.markdown("### Pendentes")
-st.dataframe(df_pendentes, use_container_width=True)
+st.write(df_pendentes_estilizado, unsafe_allow_html=True)
+
