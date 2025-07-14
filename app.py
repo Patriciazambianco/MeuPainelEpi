@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import base64
 import plotly.express as px
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 st.set_page_config(page_title="🦺 Painel de Inspeções EPI", layout="wide")
 
@@ -93,38 +94,44 @@ def gerar_download_excel(df):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-def destaque_saldo_custom(s):
-    def cor(celula):
-        if isinstance(celula, str):
-            c = celula.strip().lower()
-            if c == "não tem no saldo":
-                return 'background-color: #f8d7da; color: #842029; font-weight: bold;'
-            elif c == "tem no saldo":
-                return 'background-color: #fff3cd; color: #664d03; font-weight: bold;'
-        return ''
-    return [cor(v) for v in s]
+cellStyle_jscode = JsCode("""
+function(params) {
+    if(params.value){
+        if(params.value.toLowerCase() === 'não tem no saldo'){
+            return {
+                'color': '#842029',
+                'backgroundColor': '#f8d7da',
+                'fontWeight': 'bold'
+            }
+        } else if(params.value.toLowerCase() === 'tem no saldo'){
+            return {
+                'color': '#664d03',
+                'backgroundColor': '#fff3cd',
+                'fontWeight': 'bold'
+            }
+        }
+    }
+    return null;
+};
+""")
 
-# Carregar dados
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
 
 st.title("🦺 Painel de Inspeções EPI")
 
-# Filtros
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
 gerente_sel = st.selectbox("🔎 Filtrar por Gerente", ["-- Todos --"] + gerentes)
 df_filtrado_ger = df_tratado if gerente_sel == "-- Todos --" else df_tratado[df_tratado["GERENTE"] == gerente_sel]
+
 coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
 coordenador_sel = st.multiselect("🔎 Filtrar por Coordenador", coordenadores)
 df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_filtrado_ger["COORDENADOR"].isin(coordenador_sel)]
 
-# Pendentes
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
 
-# Botão download
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
-# KPIs
 total = len(df_filtrado)
 pending = df_filtrado["DATA_INSPECAO"].isna().sum()
 ok = total - pending
@@ -140,7 +147,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Gráfico percentual por coordenador
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
         lambda x: pd.Series({
@@ -162,8 +168,11 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Mostrar tabela pendentes com destaque na coluna SALDO SGM TÉCNICO
 if df_pendentes.empty:
     st.success("🎉 Nenhum técnico pendente! Parabéns! 👏")
 else:
-    st.write(df_pendentes.style.apply(destaque_saldo_custom, subset=["SALDO SGM TÉCNICO"]).hide_index(), unsafe_allow_html=True)
+    gb = GridOptionsBuilder.from_dataframe(df_pendentes)
+    gb.configure_default_column(autoHeight=True, wrapText=True)
+    gb.configure_column("SALDO SGM TÉCNICO", cellStyle=cellStyle_jscode)
+    gridOptions = gb.build()
+    AgGrid(df_pendentes, gridOptions=gridOptions, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
