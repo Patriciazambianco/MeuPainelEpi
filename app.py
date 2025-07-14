@@ -69,17 +69,17 @@ def gerar_download_excel(df):
         df.to_excel(writer, index=False, sheet_name="Pendentes")
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">\ud83d\udcc5 Baixar Excel Pendentes</a>'
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📅 Baixar Excel Pendentes</a>'
     return href
 
 def aplicar_estilo_pendentes(df):
     df = df.copy()
     if "SALDO SGM TÉCNICO" in df.columns:
         df["STATUS SALDO"] = df["SALDO SGM TÉCNICO"].apply(
-            lambda x: "\u274c SEM SALDO DE EPI" if pd.isna(x) or (isinstance(x, str) and "não tem" in x.lower()) else "\u2705 OK"
+            lambda x: "❌ SEM SALDO DE EPI" if pd.isna(x) or (isinstance(x, str) and "não tem" in x.lower()) else "✅ OK"
         )
         def destaque(c):
-            return ['background-color: #fff3cd; font-weight: bold' if status == "\u274c SEM SALDO DE EPI" else '' for status in c]
+            return ['background-color: #fff3cd; font-weight: bold' if status == "❌ SEM SALDO DE EPI" else '' for status in c]
         styled = df[["TÉCNICO", "COORDENADOR", "GERENTE", "FUNCAO_DESCRICAO", "SALDO SGM TÉCNICO", "STATUS SALDO"]].style.apply(
             destaque, subset=["STATUS SALDO"]
         )
@@ -87,9 +87,9 @@ def aplicar_estilo_pendentes(df):
     return df
 
 # Início
-st.title("\ud83e\udefa Painel de Inspeções EPI")
 df_raw = carregar_dados()
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+st.title("Painel de Inspeções EPI")
 
 # Filtros
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
@@ -133,7 +133,7 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_melt = df_status_coord.melt(id_vars="COORDENADOR", value_vars=["% OK", "% Pendentes"], var_name="Status", value_name="Percentual")
     fig = px.bar(df_melt, x="COORDENADOR", y="Percentual", color="Status",
                  color_discrete_map={"% OK": "#27ae60", "% Pendentes": "#f39c12"},
-                 text="Percentual", title="\ud83d\udcca Percentual de Inspeções por Coordenador",
+                 text="Percentual", title="📊 Percentual de Inspeções por Coordenador",
                  labels={"COORDENADOR": "Coordenador", "Percentual": "%"})
     fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis_range=[0, 100])
     fig.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
@@ -155,10 +155,10 @@ kpi_extra = f"""
 st.markdown(kpi_extra, unsafe_allow_html=True)
 
 # Tabelas pendentes
-st.markdown("### \ud83d\udccb Técnicos Pendentes de Inspeção")
+st.markdown("### Técnicos Pendentes de Inspeção")
 if df_pendentes.empty:
-    st.success("Nenhum técnico pendente! \ud83d\udc4f")
+    st.success("Nenhum técnico pendente! 👏")
 else:
     st.dataframe(df_pendentes[["TÉCNICO", "COORDENADOR", "GERENTE", "FUNCAO_DESCRICAO", "SALDO SGM TÉCNICO"]], use_container_width=True)
-    st.markdown("### \u26a0\ufe0f Destaque de Técnicos Sem EPI no Saldo")
+    st.markdown("### Destaque de Técnicos Sem EPI no Saldo")
     st.write(aplicar_estilo_pendentes(df_pendentes), unsafe_allow_html=True)
