@@ -6,13 +6,10 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# Estilo geral e botão piscando
 st.markdown(
     """
     <style>
-    .stApp {
-        background-color: #d0f0c0;
-    }
+    .stApp { background-color: #d0f0c0; }
     @keyframes blink {
       0% {opacity: 1;}
       50% {opacity: 0.4;}
@@ -45,9 +42,7 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
     ultimas_por_tecnico = (
-        com_data
-        .sort_values("DATA_INSPECAO")
-        .drop_duplicates(subset=["TÉCNICO"], keep="last")
+        com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
     )
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
@@ -183,8 +178,8 @@ df_filtrado["SEM EPI"] = df_filtrado["SALDO SGM TÉCNICO"].apply(
     lambda x: 1 if isinstance(x, str) and "não tem no saldo" in x.lower() else 0
 )
 
-# DEBUG: ver valores únicos e coluna SEM EPI
-st.write("## Valores únicos em 'SALDO SGM TÉCNICO' com flag 'SEM EPI'")
+# DEBUG: veja valores únicos da coluna SALDO SGM e flag SEM EPI
+st.write("### Valores únicos de SALDO SGM TÉCNICO com flag SEM EPI")
 st.write(df_filtrado[["SALDO SGM TÉCNICO", "SEM EPI"]].drop_duplicates())
 
 # Estatísticas por coordenador
@@ -197,9 +192,9 @@ df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
     })
 ).reset_index()
 
-# DEBUG: mostrar resumo por coordenador
-st.write("## Resumo por Coordenador")
-st.write(df_status_coord[["COORDENADOR", "Sem EPI", "Total"]])
+# DEBUG: resumo por coordenador
+st.write("### Resumo por Coordenador")
+st.write(df_status_coord[["COORDENADOR", "Pendentes", "OK", "Sem EPI", "Total"]])
 
 df_status_coord["% OK"] = (df_status_coord["OK"] / df_status_coord["Total"] * 100).round(1)
 df_status_coord["% Pendentes"] = (df_status_coord["Pendentes"] / df_status_coord["Total"] * 100).round(1)
@@ -211,6 +206,10 @@ df_melt = df_status_coord.melt(
     var_name="Status",
     value_name="Percentual"
 )
+
+# DEBUG: Status únicos antes do gráfico
+st.write("### Status únicos em df_melt")
+st.write(df_melt["Status"].unique())
 
 cores_status = {
     "% OK": "#27ae60",
@@ -232,10 +231,14 @@ fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0, 100
 fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
 st.plotly_chart(fig, use_container_width=True)
 
-# Estilizar tabela pendentes
-df_pendentes_visivel = df_pendentes.copy()
-if "SALDO SGM TÉCNICO" in df_pendentes_visivel.columns:
-    df_pendentes_estilizado = df_pendentes_visivel.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
+# Estiliza pendentes com destaque na coluna SALDO SGM TÉCNICO
+def destacar_saldo(celula):
+    if isinstance(celula, str) and "não tem no saldo" in celula.lower():
+        return "background-color: #fff3cd"
+    return ""
+
+if "SALDO SGM TÉCNICO" in df_pendentes.columns:
+    df_pendentes_estilizado = df_pendentes.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
     st.markdown("### Pendentes")
     st.write(df_pendentes_estilizado, unsafe_allow_html=True)
 else:
