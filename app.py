@@ -6,89 +6,92 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background-color: #d0f0c0;
-    }
-    @keyframes blink {
-      0% {opacity: 1;}
-      50% {opacity: 0.4;}
-      100% {opacity: 1;}
-    }
-    .download-btn {
-        font-size:18px; 
-        color:#fff !important; 
-        background-color:#005a9c; 
-        padding:10px 15px; 
-        border-radius:5px; 
-        text-decoration:none !important;
-        animation: blink 1.5s infinite;
-        display: inline-block;
-        margin-bottom: 20px;
-        font-weight: 700;
-    }
-    .kpi-container {
-        display: flex;
-        gap: 1.5rem;
-        margin-bottom: 2rem;
-    }
-    .kpi-box {
-        background-color: #007acc;
-        color: white;
-        border-radius: 10px;
-        padding: 20px 30px;
-        flex: 1;
-        text-align: center;
-        box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    .kpi-box.pending {
-        background-color: #f39c12;
-    }
-    .kpi-box.percent {
-        background-color: #27ae60;
-    }
-    .kpi-title {
-        font-size: 1.1rem;
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-    }
-    .kpi-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        line-height: 1;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# CSS customizado para cores e botão download
+st.markdown("""
+<style>
+.stApp {
+    background-color: #d0f0c0;
+}
+.download-btn {
+    font-size:18px; 
+    color:#fff !important; 
+    background-color:#005a9c; 
+    padding:10px 15px; 
+    border-radius:5px; 
+    text-decoration:none !important;
+    animation: blink 1.5s infinite;
+    display: inline-block;
+    margin-bottom: 20px;
+    font-weight: 700;
+}
+@keyframes blink {
+  0% {opacity: 1;}
+  50% {opacity: 0.4;}
+  100% {opacity: 1;}
+}
+.kpi-container {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.kpi-box {
+    background-color: #007acc;
+    color: white;
+    border-radius: 10px;
+    padding: 20px 30px;
+    flex: 1;
+    text-align: center;
+    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.kpi-box.pending {
+    background-color: #f39c12;
+}
+.kpi-box.percent {
+    background-color: #27ae60;
+}
+.kpi-title {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+.kpi-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+</style>
+""", unsafe_allow_html=True)
 
 @st.cache_data
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
 
-    # Corrigir coluna SALDO SGM TÉCNICO, só preencher vazio com "Não tem no saldo"
+    # Limpar e padronizar coluna SALDO SGM TÉCNICO
     if "SALDO SGM TÉCNICO" in df.columns:
-        df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].fillna("").astype(str).str.strip()
-        df.loc[df["SALDO SGM TÉCNICO"] == "", "SALDO SGM TÉCNICO"] = "Não tem no saldo"
+        df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].astype(str).str.strip()
+        df.loc[df["SALDO SGM TÉCNICO"] == "" , "SALDO SGM TÉCNICO"] = "Não tem no saldo"
     else:
-        st.error("Coluna 'SALDO SGM TÉCNICO' não encontrada.")
+        st.error("Coluna 'SALDO SGM TÉCNICO' não encontrada na base.")
         df["SALDO SGM TÉCNICO"] = "Não tem no saldo"
+
+    # Ajustar coluna DATA_INSPECAO
+    df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
+
     return df
 
 def filtrar_ultimas_inspecoes_por_tecnico(df):
-    df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
     ultimas_por_tecnico = (
-        com_data.sort_values("DATA_INSPECAO")
+        com_data
+        .sort_values("DATA_INSPECAO")
         .drop_duplicates(subset=["TÉCNICO"], keep="last")
     )
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
     sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
+
     resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
     return resultado
 
@@ -96,16 +99,34 @@ def gerar_download_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Pendentes")
+        workbook  = writer.book
+        worksheet = writer.sheets["Pendentes"]
+
+        # Formatação colorida na coluna SALDO SGM TÉCNICO
+        fmt_vermelho = workbook.add_format({'bg_color': '#f8d7da', 'font_color': '#721c24'})
+        fmt_amarelo = workbook.add_format({'bg_color': '#fff3cd', 'font_color': '#856404'})
+
+        col_idx = df.columns.get_loc("SALDO SGM TÉCNICO")
+
+        for row_num, val in enumerate(df["SALDO SGM TÉCNICO"], start=1):
+            v = str(val).strip().lower()
+            if "não tem no saldo" in v or "nao tem no saldo" in v:
+                worksheet.write(row_num, col_idx, val, fmt_vermelho)
+            elif "tem no saldo" in v:
+                worksheet.write(row_num, col_idx, val, fmt_amarelo)
+            else:
+                worksheet.write(row_num, col_idx, val)
+
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
 def destacar_saldo(val):
-    val_lower = val.lower()
-    if "não tem no saldo" in val_lower or "nao tem no saldo" in val_lower:
+    v = str(val).strip().lower()
+    if "não tem no saldo" in v or "nao tem no saldo" in v:
         return 'background-color: #f8d7da; color: #721c24;'  # vermelho clarinho
-    elif "tem no saldo" in val_lower:
+    elif "tem no saldo" in v:
         return 'background-color: #fff3cd; color: #856404;'  # amarelo clarinho
     else:
         return ''
@@ -132,13 +153,51 @@ if coordenador_sel:
 
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
 
+st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
+
 total = len(df_filtrado)
 pending = df_filtrado["DATA_INSPECAO"].isna().sum()
 ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
 
-st.markdown(f"""
+st.markdown("""
+<style>
+.kpi-container {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.kpi-box {
+    background-color: #007acc;
+    color: white;
+    border-radius: 10px;
+    padding: 20px 30px;
+    flex: 1;
+    text-align: center;
+    box-shadow: 0 4px 6px rgb(0 0 0 / 0.1);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.kpi-box.pending {
+    background-color: #f39c12;
+}
+.kpi-box.percent {
+    background-color: #27ae60;
+}
+.kpi-title {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+.kpi-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+</style>
+""", unsafe_allow_html=True)
+
+kpis_html = f"""
 <div class="kpi-container">
     <div class="kpi-box percent">
         <div class="kpi-title">Inspeções OK</div>
@@ -157,7 +216,9 @@ st.markdown(f"""
         <div class="kpi-value">{pct_pendente}%</div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(kpis_html, unsafe_allow_html=True)
 
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
@@ -190,15 +251,8 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
+st.markdown("### Pendentes")
+colunas_exibir = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SUPERVISOR", "SALDO SGM TÉCNICO"]
+df_pendentes_display = df_pendentes[colunas_exibir].fillna("")
 
-# Mostrar tabela pendentes com PRODUTO_SIMILAR, SALDO e destaque
-colunas_tabela = ["TÉCNICO", "PRODUTO_SIMILAR", "SALDO SGM TÉCNICO", "SUPERVISOR"]
-df_pendentes_clean = df_pendentes[colunas_tabela].fillna("").astype(str)
-
-st.markdown("### Técnicos Pendentes com Produto Similar e Status do Saldo SGM")
-st.write(
-    df_pendentes_clean.style
-    .applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
-    .hide(axis="index")
-)
+st.write(df_pendentes_display.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"]).hide_index())
