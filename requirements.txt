@@ -11,3 +11,4 @@ pandas
 plotly
 openpyxl
 numpy
+pip install --upgrade streamlit-aggrid
