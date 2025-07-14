@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import io
 import base64
 import plotly.express as px
@@ -171,10 +172,11 @@ else:
 if df_pendentes.empty:
     st.success("🎉 Nenhum técnico pendente! Parabéns! 👏")
 else:
-    # Tratamento para evitar erros no AgGrid
-    df_pendentes_clean = df_pendentes.fillna('')
+    # Limpeza reforçada para evitar erro JSON no AgGrid
+    df_pendentes_clean = df_pendentes.replace({np.nan: '', pd.NaT: ''})
     for col in df_pendentes_clean.columns:
-        df_pendentes_clean[col] = df_pendentes_clean[col].astype(str)
+        df_pendentes_clean[col] = df_pendentes_clean[col].astype(str).fillna('')
+    df_pendentes_clean = df_pendentes_clean.applymap(lambda x: x.encode('utf-8', 'ignore').decode('utf-8') if isinstance(x, str) else x)
 
     gb = GridOptionsBuilder.from_dataframe(df_pendentes_clean)
     gb.configure_default_column(autoHeight=True, wrapText=True)
