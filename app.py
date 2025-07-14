@@ -68,11 +68,6 @@ st.markdown("""
 .dataframe tbody tr:hover {
     background-color: #c9f0d2 !important;
 }
-.status-no-saldo {
-    background-color: #fff3cd !important;
-    font-weight: 700 !important;
-    color: #856404 !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,8 +93,16 @@ def gerar_download_excel(df):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-def destaque_saldo(s):
-    return ['status-no-saldo' if isinstance(v, str) and v.strip().lower() == "não tem no saldo" else '' for v in s]
+def destaque_saldo_custom(s):
+    def cor(celula):
+        if isinstance(celula, str):
+            c = celula.strip().lower()
+            if c == "não tem no saldo":
+                return 'background-color: #f8d7da; color: #842029; font-weight: bold;'
+            elif c == "tem no saldo":
+                return 'background-color: #fff3cd; color: #664d03; font-weight: bold;'
+        return ''
+    return [cor(v) for v in s]
 
 # Carregar dados
 df_raw = carregar_dados()
@@ -117,7 +120,6 @@ df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_fil
 
 # Pendentes
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
-df_pendentes["STATUS SALDO"] = df_pendentes["SALDO SGM TÉCNICO"]
 
 # Botão download
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
@@ -160,8 +162,8 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Mostrar tabela pendentes com destaque
+# Mostrar tabela pendentes com destaque na coluna SALDO SGM TÉCNICO
 if df_pendentes.empty:
     st.success("🎉 Nenhum técnico pendente! Parabéns! 👏")
 else:
-    st.write(df_pendentes.style.apply(destaque_saldo, subset=["STATUS SALDO"]), unsafe_allow_html=True)
+    st.write(df_pendentes.style.apply(destaque_saldo_custom, subset=["SALDO SGM TÉCNICO"]).hide_index(), unsafe_allow_html=True)
