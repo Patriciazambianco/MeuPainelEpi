@@ -57,7 +57,6 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
 
 def gerar_download_excel(df):
     df_export = df.copy()
-    # Não altera texto de SALDO, só mantém o que vem
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df_export.to_excel(writer, index=False, sheet_name="Pendentes")
@@ -184,6 +183,10 @@ df_filtrado["SEM EPI"] = df_filtrado["SALDO SGM TÉCNICO"].apply(
     lambda x: 1 if isinstance(x, str) and "não tem no saldo" in x.lower() else 0
 )
 
+# DEBUG: ver valores únicos e coluna SEM EPI
+st.write("## Valores únicos em 'SALDO SGM TÉCNICO' com flag 'SEM EPI'")
+st.write(df_filtrado[["SALDO SGM TÉCNICO", "SEM EPI"]].drop_duplicates())
+
 # Estatísticas por coordenador
 df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
     lambda x: pd.Series({
@@ -193,6 +196,10 @@ df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
         "Total": len(x)
     })
 ).reset_index()
+
+# DEBUG: mostrar resumo por coordenador
+st.write("## Resumo por Coordenador")
+st.write(df_status_coord[["COORDENADOR", "Sem EPI", "Total"]])
 
 df_status_coord["% OK"] = (df_status_coord["OK"] / df_status_coord["Total"] * 100).round(1)
 df_status_coord["% Pendentes"] = (df_status_coord["Pendentes"] / df_status_coord["Total"] * 100).round(1)
@@ -206,9 +213,9 @@ df_melt = df_status_coord.melt(
 )
 
 cores_status = {
-    "% OK": "#27ae60",           # verde
-    "% Pendentes": "#f39c12",    # laranja
-    "% Sem EPI": "#e74c3c"       # vermelho
+    "% OK": "#27ae60",
+    "% Pendentes": "#f39c12",
+    "% Sem EPI": "#e74c3c"
 }
 
 fig = px.bar(
@@ -233,4 +240,3 @@ if "SALDO SGM TÉCNICO" in df_pendentes_visivel.columns:
     st.write(df_pendentes_estilizado, unsafe_allow_html=True)
 else:
     st.warning("⚠️ A coluna 'SALDO SGM TÉCNICO' não foi encontrada no arquivo.")
-
