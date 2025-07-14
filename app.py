@@ -6,14 +6,12 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# Estilo CSS geral
 st.markdown(
     """
     <style>
     .stApp {
         background-color: #d0f0c0;
     }
-    /* Botão download piscando */
     @keyframes blink {
       0% {opacity: 1;}
       50% {opacity: 0.4;}
@@ -31,7 +29,6 @@ st.markdown(
         margin-bottom: 20px;
         font-weight: 700;
     }
-    /* KPIs */
     .kpi-container {
         display: flex;
         gap: 1.5rem;
@@ -72,15 +69,14 @@ st.markdown(
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
-    
-    # Tratamento SALDO SGM TÉCNICO
+
+    # Corrigir coluna SALDO SGM TÉCNICO, só preencher vazio com "Não tem no saldo"
     if "SALDO SGM TÉCNICO" in df.columns:
         df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].fillna("").astype(str).str.strip()
         df.loc[df["SALDO SGM TÉCNICO"] == "", "SALDO SGM TÉCNICO"] = "Não tem no saldo"
     else:
-        st.error("Coluna 'SALDO SGM TÉCNICO' não encontrada na planilha.")
+        st.error("Coluna 'SALDO SGM TÉCNICO' não encontrada.")
         df["SALDO SGM TÉCNICO"] = "Não tem no saldo"
-    
     return df
 
 def filtrar_ultimas_inspecoes_por_tecnico(df):
@@ -136,7 +132,6 @@ if coordenador_sel:
 
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
 
-# KPIs
 total = len(df_filtrado)
 pending = df_filtrado["DATA_INSPECAO"].isna().sum()
 ok = total - pending
@@ -164,7 +159,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Gráfico percentual por coordenador
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
         lambda x: pd.Series({
@@ -196,14 +190,13 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Botão download Excel pendentes
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
-# Mostrar tabela pendentes com destaque na coluna saldo
-colunas_tabela = ["TÉCNICO", "SUPERVISOR", "SALDO SGM TÉCNICO"]
+# Mostrar tabela pendentes com PRODUTO_SIMILAR, SALDO e destaque
+colunas_tabela = ["TÉCNICO", "PRODUTO_SIMILAR", "SALDO SGM TÉCNICO", "SUPERVISOR"]
 df_pendentes_clean = df_pendentes[colunas_tabela].fillna("").astype(str)
 
-st.markdown("### Técnicos Pendentes com Status do Saldo SGM")
+st.markdown("### Técnicos Pendentes com Produto Similar e Status do Saldo SGM")
 st.write(
     df_pendentes_clean.style
     .applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
