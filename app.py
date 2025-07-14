@@ -6,7 +6,6 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# Estilo básico com cores para fundo e botão download piscando
 st.markdown("""
     <style>
     .stApp { background-color: #d0f0c0; }
@@ -47,22 +46,14 @@ def carregar_dados():
 
 def filtrar_ultimas_inspecoes_por_tecnico(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
-
     com_data = df[df["DATA_INSPECAO"].notna()]
-
     ultimas_por_tecnico = (
-        com_data
-        .sort_values("DATA_INSPECAO")
-        .drop_duplicates(subset=["TÉCNICO"], keep="last")
+        com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
     )
-
     tecnicos_com_inspecao = ultimas_por_tecnico["TÉCNICO"].unique()
     sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
-
     sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
-
     resultado = pd.concat([ultimas_por_tecnico, sem_data_unicos], ignore_index=True)
-
     return resultado
 
 def gerar_download_excel(df):
@@ -71,11 +62,8 @@ def gerar_download_excel(df):
         df.to_excel(writer, index=False, sheet_name="Pendentes")
         workbook = writer.book
         worksheet = writer.sheets["Pendentes"]
-
-        # Formatação das células saldo
         formato_tem = workbook.add_format({'bg_color': '#fce5cd', 'font_color': '#b26a00'})
         formato_nao_tem = workbook.add_format({'bg_color': '#f8d7da', 'font_color': '#842029'})
-
         col_idx = df.columns.get_loc("SALDO SGM TÉCNICO")
         for row_num, val in enumerate(df["SALDO SGM TÉCNICO"], start=1):
             if val.strip().lower() == "tem no saldo":
@@ -84,25 +72,37 @@ def gerar_download_excel(df):
                 worksheet.write(row_num, col_idx, val, formato_nao_tem)
             else:
                 worksheet.write(row_num, col_idx, val)
-
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-def color_saldo(val):
-    val_lower = str(val).strip().lower()
-    if val_lower == "tem no saldo":
-        return 'background-color: #fce5cd; color: #b26a00; font-weight: bold;'
-    elif val_lower in ["não tem no saldo", "nao tem no saldo"]:
-        return 'background-color: #f8d7da; color: #842029; font-weight: bold;'
-    else:
-        return ''
+def destaque_saldo(val):
+    if isinstance(val, str):
+        v = val.lower().strip()
+        if v == "tem no saldo":
+            return "background-color:#fce5cd; color:#b26a00; font-weight:bold;"
+        elif v in ["não tem no saldo", "nao tem no saldo"]:
+            return "background-color:#f8d7da; color:#842029; font-weight:bold;"
+    return ""
+
+def padronizar_coluna_saldo(df):
+    def normaliza(val):
+        val = str(val).strip().lower()
+        if "tem" in val and not ("não" in val or "nao" in val):
+            return "Tem no saldo"
+        elif "não" in val or "nao" in val:
+            return "Não tem no saldo"
+        else:
+            return val
+    df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].fillna("Não tem no saldo").apply(normaliza)
+    return df
 
 st.title("🦺 Painel de Inspeções EPI")
 
-df_raw = carregar_dados()
-df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+# Carga e processamento
+original_df = carregar_dados()
+df_tratado = filtrar_ultimas_inspecoes_por_tecnico(original_df)
 
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
 gerente_sel = st.selectbox("Filtrar por Gerente", ["-- Todos --"] + gerentes)
@@ -120,9 +120,7 @@ if coordenador_sel:
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"].isin(coordenador_sel)]
 
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
-
-# Garantir que a coluna saldo tenha texto padrão para facilitar o destaque
-df_pendentes["SALDO SGM TÉCNICO"] = df_pendentes["SALDO SGM TÉCNICO"].fillna("Não tem no saldo").astype(str)
+df_pendentes = padronizar_coluna_saldo(df_pendentes)
 
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
@@ -132,7 +130,7 @@ ok = total - pending
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendente = round(100 - pct_ok, 1)
 
-kpi_css = """
+st.markdown("""
 <style>
 .kpi-container {
     display: flex;
@@ -166,11 +164,9 @@ kpi_css = """
     line-height: 1;
 }
 </style>
-"""
+""", unsafe_allow_html=True)
 
-st.markdown(kpi_css, unsafe_allow_html=True)
-
-kpis_html = f"""
+st.markdown(f"""
 <div class="kpi-container">
     <div class="kpi-box percent">
         <div class="kpi-title">Inspeções OK</div>
@@ -189,9 +185,7 @@ kpis_html = f"""
         <div class="kpi-value">{pct_pendente}%</div>
     </div>
 </div>
-"""
-
-st.markdown(kpis_html, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_status_coord = df_filtrado.groupby("COORDENADOR").apply(
@@ -211,4 +205,23 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
     fig = px.bar(
         df_melt,
         x="COORDENADOR",
-        y="
+        y="Percentual",
+        color="Status",
+        color_discrete_map={"% OK": "#27ae60", "% Pendentes": "#f39c12"},
+        title="% Inspeções por Coordenador",
+        labels={"Percentual": "% das Inspeções", "COORDENADOR": "Coordenador"},
+        barmode="stack",
+        text="Percentual",
+    )
+    fig.update_traces(texttemplate='%{text}%', textposition='inside')
+    fig.update_layout(yaxis=dict(range=[0, 100]), uniformtext_minsize=8, uniformtext_mode='hide')
+
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Selecione um gerente e coordenador para visualizar o gráfico.")
+
+colunas_exibir = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SALDO SGM TÉCNICO", "SUPERVISOR"]
+df_pendentes_display = df_pendentes[colunas_exibir].fillna("").astype(str)
+
+st.write("### Técnicos Pendentes e Saldo SGM Técnico")
+st.dataframe(df_pendentes_display.style.applymap(destaque_saldo, subset=["SALDO SGM TÉCNICO"]).hide_index(), use_container_width=True)
