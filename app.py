@@ -56,15 +56,41 @@ def filtrar_ultimas_inspecoes_por_tecnico(df):
     return resultado
 
 def gerar_download_excel(df):
+    df_export = df.copy()
+    if "SALDO SGM TÉCNICO" in df_export.columns:
+        df_export["SALDO SGM TÉCNICO"] = df_export["SALDO SGM TÉCNICO"].apply(
+            lambda x: "TEM NO SALDO" if pd.notna(x) else "FUNCIONÁRIO SEM SALDO DE EPI"
+        )
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Pendentes")
+        df_export.to_excel(writer, index=False, sheet_name="Pendentes")
+        workbook  = writer.book
+        worksheet = writer.sheets["Pendentes"]
+
+        # Formatação para destacar células com "FUNCIONÁRIO SEM SALDO DE EPI"
+        format_amarelo = workbook.add_format({'bg_color': '#fff3cd'})
+
+        # Encontrar o índice da coluna "SALDO SGM TÉCNICO"
+        try:
+            col_idx = df_export.columns.get_loc("SALDO SGM TÉCNICO")
+        except KeyError:
+            col_idx = None
+
+        if col_idx is not None:
+            # Aplicar formatação condicional na coluna inteira (excluindo cabeçalho)
+            worksheet.conditional_format(1, col_idx, len(df_export), col_idx, {
+                'type':     'text',
+                'criteria': 'containing',
+                'value':    'FUNCIONÁRIO SEM SALDO DE EPI',
+                'format':   format_amarelo
+            })
+
     dados_excel = output.getvalue()
     b64 = base64.b64encode(dados_excel).decode()
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-# CSS para os KPIs
+# CSS para KPIs
 kpi_css = """
 <style>
 .kpi-container {
@@ -101,10 +127,9 @@ kpi_css = """
 </style>
 """
 
-# Função para destacar a célula com cor se estiver "sem saldo"
 def destacar_saldo(celula):
     if celula == "FUNCIONÁRIO SEM SALDO DE EPI":
-        return "background-color: #fff3cd"  # amarelo claro
+        return "background-color: #fff3cd"  # amarelo clarinho
     return ""
 
 st.title("🦺 Painel de Inspeções EPI")
@@ -182,24 +207,5 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
         y="Percentual",
         color="Status",
         color_discrete_map={"% OK": "#27ae60", "% Pendentes": "#f39c12"},
-        labels={"Percentual": "% das Inspeções", "Status": "Status", "COORDENADOR": "Coordenador"},
-        title="Percentual das Inspeções por Coordenador",
-        text="Percentual"
-    )
-    fig.update_layout(barmode="stack", xaxis_tickangle=-45, yaxis=dict(range=[0, 100]))
-    fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
+        labels={"Percentual": "% das Inspeções", "Status": "Status", "
 
-# Substituir valores da coluna SALDO SGM TÉCNICO para visualização
-df_pendentes_visivel = df_pendentes.copy()
-if "SALDO SGM TÉCNICO" in df_pendentes_visivel.columns:
-    df_pendentes_visivel["SALDO SGM TÉCNICO"] = df_pendentes_visivel["SALDO SGM TÉCNICO"].apply(
-        lambda x: "TEM NO SALDO" if pd.notna(x) else "FUNCIONÁRIO SEM SALDO DE EPI"
-    )
-    df_pendentes_estilizado = df_pendentes_visivel.style.applymap(destacar_saldo, subset=["SALDO SGM TÉCNICO"])
-    st.markdown("### Pendentes")
-    st.write(df_pendentes_estilizado, unsafe_allow_html=True)
-else:
-    st.warning("⚠️ A coluna 'SALDO SGM TÉCNICO' não foi encontrada no arquivo.")
