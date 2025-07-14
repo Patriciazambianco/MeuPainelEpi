@@ -6,7 +6,7 @@ import plotly.express as px
 
 st.set_page_config(page_title="Inspeções EPI", layout="wide")
 
-# Cor de fundo Verde Menta Pastel
+# Cor de fundo Verde Menta Pastel e botão piscando
 st.markdown(
     """
     <style>
@@ -70,19 +70,18 @@ def gerar_download_excel(df):
         # Formatação para destacar células com "FUNCIONÁRIO SEM SALDO DE EPI"
         format_amarelo = workbook.add_format({'bg_color': '#fff3cd'})
 
-        # Encontrar o índice da coluna "SALDO SGM TÉCNICO"
+        # Encontrar índice da coluna "SALDO SGM TÉCNICO"
         try:
             col_idx = df_export.columns.get_loc("SALDO SGM TÉCNICO")
         except KeyError:
             col_idx = None
 
         if col_idx is not None:
-            # Aplicar formatação condicional na coluna inteira (excluindo cabeçalho)
             worksheet.conditional_format(1, col_idx, len(df_export), col_idx, {
-                'type':     'text',
+                'type': 'text',
                 'criteria': 'containing',
-                'value':    'FUNCIONÁRIO SEM SALDO DE EPI',
-                'format':   format_amarelo
+                'value': 'FUNCIONÁRIO SEM SALDO DE EPI',
+                'format': format_amarelo
             })
 
     dados_excel = output.getvalue()
@@ -90,7 +89,6 @@ def gerar_download_excel(df):
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
     return href
 
-# CSS para KPIs
 kpi_css = """
 <style>
 .kpi-container {
@@ -201,7 +199,7 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
     df_melt = df_status_coord.melt(id_vars="COORDENADOR", value_vars=["% OK", "% Pendentes"],
                                    var_name="Status", value_name="Percentual")
 
-        fig = px.bar(
+    fig = px.bar(
         df_melt,
         x="COORDENADOR",
         y="Percentual",
@@ -217,7 +215,7 @@ if len(df_filtrado) > 0 and len(coordenadores) > 0:
 else:
     st.info("Selecione um gerente e/ou coordenador para visualizar o gráfico.")
 
-# Substituir valores da coluna SALDO SGM TÉCNICO para visualização
+# Para visualização na tabela, substituir valores na coluna SALDO SGM TÉCNICO
 df_pendentes_visivel = df_pendentes.copy()
 if "SALDO SGM TÉCNICO" in df_pendentes_visivel.columns:
     df_pendentes_visivel["SALDO SGM TÉCNICO"] = df_pendentes_visivel["SALDO SGM TÉCNICO"].apply(
