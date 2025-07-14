@@ -9,6 +9,7 @@ st.set_page_config(page_title="Painel Inspeções EPI", layout="wide")
 def carregar_dados():
     url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
     df = pd.read_excel(url, engine="openpyxl")
+    # Ajusta texto em SALDO SGM TÉCNICO e trata valores vazios
     df["SALDO SGM TÉCNICO"] = df["SALDO SGM TÉCNICO"].astype(str).str.strip()
     df.loc[df["SALDO SGM TÉCNICO"].isin(["", "nan", "NaN"]), "SALDO SGM TÉCNICO"] = "Não tem no saldo"
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
@@ -33,9 +34,12 @@ coordenadores = sorted(df_filtrado_ger["COORDENADOR"].dropna().unique())
 coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
 df_filtrado = df_filtrado_ger[df_filtrado_ger["COORDENADOR"].isin(coordenador_sel)] if coordenador_sel else df_filtrado_ger.copy()
 
+# --- FILTRA OS PENDENTES (SEM DATA DE INSPEÇÃO) ---
+df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
+
 # --- KPIs ---
 total = len(df_filtrado)
-pendentes = df_filtrado["DATA_INSPECAO"].isna().sum()
+pendentes = len(df_pendentes)
 ok = total - pendentes
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pendentes = round(100 - pct_ok, 1)
@@ -119,4 +123,3 @@ AgGrid(
     theme="fresh",
     height=400,
 )
-
