@@ -11,14 +11,15 @@ def gerar_excel_download(df):
     output.seek(0)
     return output
 
-# Link raw corrigido do GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 
 # Lê o Excel
 df = pd.read_excel(url)
 
-# Ajuste dos nomes de colunas
+# Padroniza nomes das colunas (maiúsculas e sem espaços nas extremidades)
 df = df.rename(columns=lambda x: x.upper().strip())
+
+# Renomeia colunas essenciais
 df = df.rename(columns={
     "SITUACAO_TECNICO": "STATUS",
     "COORDENADOR": "COORDENADOR",
@@ -26,14 +27,16 @@ df = df.rename(columns={
     "TECNICO": "TECNICO"
 })
 
-# Verifica se colunas estão presentes
-colunas_esperadas = ["TECNICO", "GERENTE", "COORDENADOR", "STATUS"]
-faltando = [col for col in colunas_esperadas if col not in df.columns]
-if faltando:
-    st.error(f"⚠️ Colunas faltando no Excel: {faltando}")
-    st.stop()
+# Padroniza os valores da coluna STATUS para facilitar análise
+df["STATUS"] = df["STATUS"].astype(str).str.strip().str.upper()
 
-# Filtros
+# Corrige valores específicos para OK e PENDENTE
+df["STATUS"] = df["STATUS"].replace({
+    "CHECK LIST OK": "OK",
+    "PENDENTE": "PENDENTE"
+})
+
+# --- FILTROS ---
 col1, col2 = st.columns(2)
 gerentes = sorted(df['GERENTE'].dropna().unique().tolist())
 coordenadores = sorted(df['COORDENADOR'].dropna().unique().tolist())
@@ -49,7 +52,7 @@ if gerente_selecionado != "Todos":
 if coordenador_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_selecionado]
 
-# Agrupar por técnico e status
+# Agrupa por Técnico e Status
 tabela_tecnicos = df_filtrado.groupby(["TECNICO", "STATUS"]).size().unstack(fill_value=0)
 tabela_tecnicos["Tem_OK"] = tabela_tecnicos.get("OK", 0) > 0
 tabela_tecnicos["Tem_PENDENTE"] = tabela_tecnicos.get("PENDENTE", 0) > 0
@@ -61,7 +64,7 @@ total = tabela_tecnicos.shape[0]
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pend = round(pendentes / total * 100, 1) if total > 0 else 0
 
-# HTML KPIs
+# Exibe os KPIs com estilo
 st.markdown(f"""
 <style>
 .kpi-container {{
@@ -92,14 +95,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Técnicos Pendentes
+# Técnicos pendentes
 tecnicos_pendentes = tabela_tecnicos[tabela_tecnicos["Tem_PENDENTE"] == True].reset_index()
 df_pendentes = pd.merge(tecnicos_pendentes[["TECNICO"]], df_filtrado, on="TECNICO", how="left")
 
 with st.expander("📋 Ver Técnicos Pendentes"):
     st.dataframe(df_pendentes)
 
-# Botão download
+# Botão para baixar os pendentes em Excel
 excel_download = gerar_excel_download(df_pendentes)
 st.download_button(
     label="⬇️ Baixar Pendentes em Excel",
