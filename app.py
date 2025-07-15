@@ -142,6 +142,6 @@ st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 # Tabela
 st.write("### Técnicos Pendentes e Saldo SGM Técnico")
 
-colunas_exibir = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SALDO SGM TÉCNICO", "SUPERVISOR"]
+colunas_exibir = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SUPERVISOR"]
 df_exibir = df_pendentes[colunas_exibir].fillna("").astype(str)
 st.dataframe(df_exibir.style.applymap(color_saldo, subset=["SALDO SGM TÉCNICO"]), use_container_width=True)
