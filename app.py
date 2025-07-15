@@ -33,17 +33,17 @@ def filtrar_ultimas_inspecoes_por_tecnico_produto(df):
     df["DATA INSPECAO"] = pd.to_datetime(df["DATA INSPECAO"], errors="coerce")
     com_data = df[df["DATA INSPECAO"].notna()]
 
-    # Última inspeção por técnico + produto
+  
     ultimas = (
         com_data
         .sort_values("DATA INSPECAO")
-        .drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"], keep="last")
+        .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="last")
     )
 
-    # Técnicos+produtos sem inspeção
+
     todas_combinacoes = df.drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"])
     nunca = todas_combinacoes[~todas_combinacoes.set_index(["TÉCNICO", "PRODUTO_SIMILAR"]).index.isin(
-        ultimas.set_index(["TÉCNICO", "PRODUTO_SIMILAR"]).index
+        ultimas.set_index(["TECNICO", "PRODUTO_SIMILAR"]).index
     )]
 
     return pd.concat([ultimas, nunca], ignore_index=True)
