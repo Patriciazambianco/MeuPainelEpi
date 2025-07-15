@@ -30,13 +30,13 @@ def carregar_dados():
     return df
 
 def filtrar_ultimas_inspecoes_por_tecnico_produto(df):
-    df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
-    com_data = df[df["DATA_INSPECAO"].notna()]
+    df["DATA INSPECAO"] = pd.to_datetime(df["DATA INSPECAO"], errors="coerce")
+    com_data = df[df["DATA INSPECAO"].notna()]
 
     # Última inspeção por técnico + produto
     ultimas = (
         com_data
-        .sort_values("DATA_INSPECAO")
+        .sort_values("DATA INSPECAO")
         .drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"], keep="last")
     )
 
@@ -74,7 +74,7 @@ coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
 df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_filtrado_ger["COORDENADOR"].isin(coordenador_sel)]
 
 # Pendentes
-df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
+df_pendentes = df_filtrado[df_filtrado["DATA INSPECAO"].isna()]
 df_pendentes["SALDO SGM TÉCNICO"] = df_pendentes["SALDO SGM TÉCNICO"].fillna("Não tem no saldo")
 
 # Botão de download
@@ -82,7 +82,7 @@ st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
 # KPIs
 total = len(df_filtrado)
-ok = df_filtrado["DATA_INSPECAO"].notna().sum()
+ok = df_filtrado["DATA INSPECAO"].notna().sum()
 pending = total - ok
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = 100 - pct_ok
@@ -119,8 +119,8 @@ st.markdown(f"""
 # Gráfico
 if len(df_filtrado) and len(coordenadores):
     df_status = df_filtrado.groupby("COORDENADOR").apply(lambda x: pd.Series({
-        "OK": x["DATA_INSPECAO"].notna().sum(),
-        "Pendentes": x["DATA_INSPECAO"].isna().sum()
+        "OK": x["DATA INSPECAO"].notna().sum(),
+        "Pendentes": x["DATA INSPECAO"].isna().sum()
     })).reset_index()
 
     df_status["% OK"] = round(df_status["OK"] / (df_status["OK"] + df_status["Pendentes"]) * 100, 1)
