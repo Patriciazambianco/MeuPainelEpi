@@ -60,6 +60,7 @@ st.title("🦺 Painel de Inspeções EPI")
 
 # Carregar e tratar dados
 df_raw = carregar_dados()
+st.write("🔍 Colunas da planilha:", df_raw.columns.tolist())
 df_tratado = filtrar_ultimas_inspecoes_por_tecnico_produto(df_raw)
 
 # Filtros
