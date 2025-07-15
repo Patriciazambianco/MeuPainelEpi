@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-# === CONFIGURAÇÃO DA PÁGINA ===
-st.set_page_config(page_title="Painel de Inspeções", layout="wide")
+# Configura a página
+st.set_page_config(page_title="Painel de Inspeções EPI", layout="wide")
 
-# === FUNÇÃO PARA BAIXAR EXCEL ===
+# Função para gerar arquivo Excel para download
 def gerar_excel_download(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -13,11 +13,27 @@ def gerar_excel_download(df):
     output.seek(0)
     return output
 
-# === LER ARQUIVO DO GITHUB ===
-url = "https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPOSITORIO/main/dados.xlsx"  # <-- TROCAR AQUI
+# Link RAW do seu arquivo no GitHub
+url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
+
+# Lê o Excel
 df = pd.read_excel(url)
 
-# === FILTROS DINÂMICOS ===
+# Mostra os dados crus (opcional para debug)
+# st.dataframe(df)
+
+# --- AJUSTE NOMES DAS COLUNAS CONFORME NECESSÁRIO ---
+# Exemplo esperado: "TECNICO", "GERENTE", "COORDENADOR", "STATUS"
+# Renomeie se necessário:
+df = df.rename(columns=lambda x: x.upper().strip())
+df = df.rename(columns={
+    "SITUAÇÃO_TECNICO": "STATUS",  # adapte conforme necessário
+    "COORDENADOR": "COORDENADOR",
+    "GERENTE": "GERENTE",
+    "TECNICO": "TECNICO"
+})
+
+# Filtros
 col1, col2 = st.columns(2)
 gerentes = sorted(df['GERENTE'].dropna().unique().tolist())
 coordenadores = sorted(df['COORDENADOR'].dropna().unique().tolist())
@@ -27,27 +43,26 @@ with col1:
 with col2:
     coordenador_selecionado = st.selectbox("Filtrar por COORDENADOR:", ["Todos"] + coordenadores)
 
-# === APLICAR FILTROS ===
+# Aplicar filtros
 df_filtrado = df.copy()
 if gerente_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_selecionado]
 if coordenador_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_selecionado]
 
-# === AGRUPAMENTO POR TÉCNICO ===
+# Agrupar por técnico e status
 tabela_tecnicos = df_filtrado.groupby(["TECNICO", "STATUS"]).size().unstack(fill_value=0)
 tabela_tecnicos["Tem_OK"] = tabela_tecnicos.get("OK", 0) > 0
-tabela_tecnicos["Tem_Pendente"] = tabela_tecnicos.get("Pendente", 0) > 0
+tabela_tecnicos["Tem_Pendente"] = tabela_tecnicos.get("PENDENTE", 0) > 0
 
-# === MÉTRICAS GERAIS ===
+# KPIs
 ok = tabela_tecnicos["Tem_OK"].sum()
 pendentes = tabela_tecnicos["Tem_Pendente"].sum()
 total = tabela_tecnicos.shape[0]
-
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pend = round(pendentes / total * 100, 1) if total > 0 else 0
 
-# === HTML DOS KPIs ===
+# Exibir KPIs
 st.markdown(f"""
 <style>
 .kpi-container {{
@@ -78,14 +93,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# === TÉCNICOS PENDENTES PARA DOWNLOAD ===
+# Técnicos Pendentes
 tecnicos_pendentes = tabela_tecnicos[tabela_tecnicos["Tem_Pendente"] == True].reset_index()
 df_pendentes = pd.merge(tecnicos_pendentes[["TECNICO"]], df_filtrado, on="TECNICO", how="left")
 
 with st.expander("📋 Ver Técnicos Pendentes"):
     st.dataframe(df_pendentes)
 
-# === BOTÃO DE DOWNLOAD ===
+# Botão para baixar Excel dos Pendentes
 excel_download = gerar_excel_download(df_pendentes)
 st.download_button(
     label="⬇️ Baixar Pendentes em Excel",
