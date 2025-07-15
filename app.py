@@ -41,8 +41,8 @@ def filtrar_ultimas_inspecoes_por_tecnico_produto(df):
     )
 
 
-    todas_combinacoes = df.drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"])
-    nunca = todas_combinacoes[~todas_combinacoes.set_index(["TÉCNICO", "PRODUTO_SIMILAR"]).index.isin(
+    todas_combinacoes = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])
+    nunca = todas_combinacoes[~todas_combinacoes.set_index(["TECNICO", "PRODUTO_SIMILAR"]).index.isin(
         ultimas.set_index(["TECNICO", "PRODUTO_SIMILAR"]).index
     )]
 
@@ -76,7 +76,7 @@ df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_fil
 
 # Pendentes
 df_pendentes = df_filtrado[df_filtrado["DATA INSPECAO"].isna()]
-df_pendentes["SALDO SGM TÉCNICO"] = df_pendentes["SALDO SGM TÉCNICO"].fillna("Não tem no saldo")
+df_pendentes["SALDO SGM TECNICO"] = df_pendentes["SALDO SGM TECNICO"].fillna("Não tem no saldo")
 
 # Botão de download
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
@@ -138,6 +138,6 @@ else:
     st.info("Selecione um gerente e coordenador para visualizar o gráfico.")
 
 # Tabela pendentes
-st.write("### Técnicos Pendentes")
-colunas = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SUPERVISOR"]
+st.write("### TECNICOs Pendentes")
+colunas = ["TECNICO", "FUNCAO", "PRODUTO_SIMILAR", "SUPERVISOR"]
 st.dataframe(df_pendentes[colunas].fillna(""), use_container_width=True)
