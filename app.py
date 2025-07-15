@@ -7,92 +7,88 @@ st.set_page_config(page_title="Painel de Inspeções EPI", layout="wide")
 def gerar_excel_download(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Pendentes_SemInspecao')
+        df.to_excel(writer, index=False, sheet_name='Status_Tecnicos')
     output.seek(0)
     return output
 
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-
-# Leitura do Excel
 df = pd.read_excel(url)
-
-# Normaliza nomes das colunas
 df = df.rename(columns=lambda x: x.upper().strip())
 
-# Renomeia as colunas certas
+# Padroniza nomes
 df = df.rename(columns={
     "STATUS CHECK LIST": "STATUS",
-    "COORDENADOR": "COORDENADOR",
     "GERENTE": "GERENTE",
+    "COORDENADOR": "COORDENADOR",
     "TECNICO": "TECNICO",
     "PRODUTO_SIMILAR": "PRODUTO_SIMILAR",
     "DATA INSPECAO": "DATA_INSPECAO"
 })
 
-# Padroniza valores da coluna STATUS
 df["STATUS"] = df["STATUS"].astype(str).str.strip().str.upper()
 df["STATUS"] = df["STATUS"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
 
-# Converte DATA_INSPECAO para datetime
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors='coerce')
 
-# Ordena para pegar a última inspeção
-df = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
+# Última inspeção por técnico e produto
+df_ultimas = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False]) \
+              .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
-# Últimas inspeções (com data)
-df_ultimas = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first").reset_index(drop=True)
+# Resumo status por técnico
+status_por_tecnico = df_ultimas.groupby("TECNICO")["STATUS"].apply(list).reset_index()
 
-# Base com todas as combinações técnico + produto
-df_base = df[["TECNICO", "PRODUTO_SIMILAR"]].drop_duplicates()
+def resumo_status(lista):
+    s = set(lista)
+    if "PENDENTE" in s:
+        return "PENDENTE"
+    elif "OK" in s:
+        return "OK"
+    else:
+        return "SEM INSPECAO"
 
-# Merge LEFT para trazer todos técnicos+produtos, mesmo sem inspeção
-df_final = pd.merge(df_base, df_ultimas, on=["TECNICO", "PRODUTO_SIMILAR"], how="left", suffixes=('', '_ULTIMA'))
+status_por_tecnico["STATUS_RESUMO"] = status_por_tecnico["STATUS"].apply(resumo_status)
 
-# Substitui STATUS NaN por 'SEM INSPECAO'
-df_final["STATUS"] = df_final["STATUS"].fillna("SEM INSPECAO")
+# Todos técnicos da base (inclui quem nunca fez inspeção)
+todos_tecnicos = pd.DataFrame(df["TECNICO"].unique(), columns=["TECNICO"])
+
+# Junta para garantir todos técnicos
+status_tecnicos = todos_tecnicos.merge(status_por_tecnico[["TECNICO", "STATUS_RESUMO"]], on="TECNICO", how="left")
+status_tecnicos["STATUS_RESUMO"] = status_tecnicos["STATUS_RESUMO"].fillna("SEM INSPECAO")
+
+# Info de gerente e coordenador
+info_tecnicos = df[["TECNICO", "GERENTE", "COORDENADOR"]].drop_duplicates()
+status_tecnicos = status_tecnicos.merge(info_tecnicos, on="TECNICO", how="left")
 
 # Filtros
 col1, col2 = st.columns(2)
-gerentes = sorted(df_final['GERENTE'].dropna().unique().tolist())
-coordenadores = sorted(df_final['COORDENADOR'].dropna().unique().tolist())
+gerentes = sorted(status_tecnicos['GERENTE'].dropna().unique())
+coordenadores = sorted(status_tecnicos['COORDENADOR'].dropna().unique())
 
 with col1:
     gerente_selecionado = st.selectbox("Filtrar por GERENTE:", ["Todos"] + gerentes)
 with col2:
     coordenador_selecionado = st.selectbox("Filtrar por COORDENADOR:", ["Todos"] + coordenadores)
 
-df_filtrado = df_final.copy()
+df_filtrado = status_tecnicos.copy()
 if gerente_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_selecionado]
 if coordenador_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_selecionado]
 
-# Agrupa por Técnico e Status
-tabela_tecnicos = df_filtrado.groupby(["TECNICO", "STATUS"]).size().unstack(fill_value=0)
+# KPIs
+total = len(df_filtrado)
+ok = (df_filtrado["STATUS_RESUMO"] == "OK").sum()
+pendente = (df_filtrado["STATUS_RESUMO"] == "PENDENTE").sum()
+sem_inspecao = (df_filtrado["STATUS_RESUMO"] == "SEM INSPECAO").sum()
 
-# Marca técnicos com cada status
-tabela_tecnicos["Tem_OK"] = tabela_tecnicos.get("OK", 0) > 0
-tabela_tecnicos["Tem_PENDENTE"] = tabela_tecnicos.get("PENDENTE", 0) > 0
-tabela_tecnicos["Tem_SEM_INSPECAO"] = tabela_tecnicos.get("SEM INSPECAO", 0) > 0
+pct_ok = round(ok / total * 100, 1) if total else 0
+pct_pendente = round(pendente / total * 100, 1) if total else 0
+pct_sem = round(sem_inspecao / total * 100, 1) if total else 0
 
-total = tabela_tecnicos.shape[0]
-
-# Contagens exclusivas
-pendentes = tabela_tecnicos[tabela_tecnicos["Tem_PENDENTE"] == True].shape[0]
-ok_sem_pend = tabela_tecnicos[
-    (tabela_tecnicos["Tem_OK"] == True) & (tabela_tecnicos["Tem_PENDENTE"] == False)
-].shape[0]
-sem_inspecao = tabela_tecnicos[tabela_tecnicos["Tem_SEM_INSPECAO"] == True].shape[0]
-
-# Percentuais
-pct_ok = round(ok_sem_pend / total * 100, 1) if total > 0 else 0
-pct_pend = round(pendentes / total * 100, 1) if total > 0 else 0
-pct_sem = round(sem_inspecao / total * 100, 1) if total > 0 else 0
-
-# Exibe KPIs com estilo
+# KPIs bonitões
 st.markdown(f"""
 <style>
 .kpi-container {{
@@ -117,27 +113,20 @@ st.markdown(f"""
 </style>
 
 <div class="kpi-container">
-  <div class="kpi-box green">✔️ Técnicos OK: {ok_sem_pend} ({pct_ok}%)</div>
-  <div class="kpi-box orange">⚠️ Técnicos Pendentes: {pendentes} ({pct_pend}%)</div>
+  <div class="kpi-box green">✔️ Técnicos OK: {ok} ({pct_ok}%)</div>
+  <div class="kpi-box orange">⚠️ Técnicos Pendentes: {pendente} ({pct_pendente}%)</div>
   <div class="kpi-box gray">❓ Sem Inspeção: {sem_inspecao} ({pct_sem}%)</div>
 </div>
 """, unsafe_allow_html=True)
 
-# Exibe técnicos pendentes e sem inspeção na tabela
-tecnicos_pendentes_sem = tabela_tecnicos[
-    (tabela_tecnicos["Tem_PENDENTE"] == True) | (tabela_tecnicos["Tem_SEM_INSPECAO"] == True)
-].reset_index()
+# Mostrar tabela dos técnicos filtrados
+st.dataframe(df_filtrado)
 
-df_pendentes_sem = pd.merge(tecnicos_pendentes_sem[["TECNICO"]], df_filtrado, on="TECNICO", how="left")
-
-with st.expander("📋 Ver Técnicos Pendentes e Sem Inspeção"):
-    st.dataframe(df_pendentes_sem)
-
-# Botão para baixar pendentes e sem inspeção em Excel
-excel_download = gerar_excel_download(df_pendentes_sem)
+# Botão para baixar Excel
+excel = gerar_excel_download(df_filtrado)
 st.download_button(
-    label="⬇️ Baixar Pendentes e Sem Inspeção em Excel",
-    data=excel_download,
-    file_name="pendentes_sem_inspecao_tecnicos.xlsx",
+    label="⬇️ Baixar Status Técnicos",
+    data=excel,
+    file_name="status_tecnicos.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
