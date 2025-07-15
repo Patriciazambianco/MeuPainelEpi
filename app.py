@@ -2,10 +2,8 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-# Configura a página
 st.set_page_config(page_title="Painel de Inspeções EPI", layout="wide")
 
-# Função para gerar arquivo Excel para download
 def gerar_excel_download(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -13,25 +11,27 @@ def gerar_excel_download(df):
     output.seek(0)
     return output
 
-# Link RAW do seu arquivo no GitHub
+# Link raw corrigido do GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 
 # Lê o Excel
 df = pd.read_excel(url)
 
-# Mostra os dados crus (opcional para debug)
-# st.dataframe(df)
-
-# --- AJUSTE NOMES DAS COLUNAS CONFORME NECESSÁRIO ---
-# Exemplo esperado: "TECNICO", "GERENTE", "COORDENADOR", "STATUS"
-# Renomeie se necessário:
+# Ajuste dos nomes de colunas
 df = df.rename(columns=lambda x: x.upper().strip())
 df = df.rename(columns={
-    "SITUAÇÃO_TECNICO": "STATUS",  # adapte conforme necessário
+    "SITUACAO_TECNICO": "STATUS",
     "COORDENADOR": "COORDENADOR",
     "GERENTE": "GERENTE",
     "TECNICO": "TECNICO"
 })
+
+# Verifica se colunas estão presentes
+colunas_esperadas = ["TECNICO", "GERENTE", "COORDENADOR", "STATUS"]
+faltando = [col for col in colunas_esperadas if col not in df.columns]
+if faltando:
+    st.error(f"⚠️ Colunas faltando no Excel: {faltando}")
+    st.stop()
 
 # Filtros
 col1, col2 = st.columns(2)
@@ -43,7 +43,6 @@ with col1:
 with col2:
     coordenador_selecionado = st.selectbox("Filtrar por COORDENADOR:", ["Todos"] + coordenadores)
 
-# Aplicar filtros
 df_filtrado = df.copy()
 if gerente_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_selecionado]
@@ -53,16 +52,16 @@ if coordenador_selecionado != "Todos":
 # Agrupar por técnico e status
 tabela_tecnicos = df_filtrado.groupby(["TECNICO", "STATUS"]).size().unstack(fill_value=0)
 tabela_tecnicos["Tem_OK"] = tabela_tecnicos.get("OK", 0) > 0
-tabela_tecnicos["Tem_Pendente"] = tabela_tecnicos.get("PENDENTE", 0) > 0
+tabela_tecnicos["Tem_PENDENTE"] = tabela_tecnicos.get("PENDENTE", 0) > 0
 
 # KPIs
 ok = tabela_tecnicos["Tem_OK"].sum()
-pendentes = tabela_tecnicos["Tem_Pendente"].sum()
+pendentes = tabela_tecnicos["Tem_PENDENTE"].sum()
 total = tabela_tecnicos.shape[0]
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pend = round(pendentes / total * 100, 1) if total > 0 else 0
 
-# Exibir KPIs
+# HTML KPIs
 st.markdown(f"""
 <style>
 .kpi-container {{
@@ -94,13 +93,13 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Técnicos Pendentes
-tecnicos_pendentes = tabela_tecnicos[tabela_tecnicos["Tem_Pendente"] == True].reset_index()
+tecnicos_pendentes = tabela_tecnicos[tabela_tecnicos["Tem_PENDENTE"] == True].reset_index()
 df_pendentes = pd.merge(tecnicos_pendentes[["TECNICO"]], df_filtrado, on="TECNICO", how="left")
 
 with st.expander("📋 Ver Técnicos Pendentes"):
     st.dataframe(df_pendentes)
 
-# Botão para baixar Excel dos Pendentes
+# Botão download
 excel_download = gerar_excel_download(df_pendentes)
 st.download_button(
     label="⬇️ Baixar Pendentes em Excel",
