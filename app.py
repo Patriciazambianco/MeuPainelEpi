@@ -76,7 +76,7 @@ df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_fil
 
 # Pendentes
 df_pendentes = df_filtrado[df_filtrado["DATA INSPECAO"].isna()]
-df_pendentes["SALDO SGM TECNICO"] = df_pendentes["SALDO SGM TECNICO"].fillna("Não tem no saldo")
+
 
 # Botão de download
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
