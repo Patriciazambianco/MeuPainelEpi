@@ -13,30 +13,28 @@ def gerar_excel_download(df):
 
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 
-# Lê o Excel
+# Leitura do Excel
 df = pd.read_excel(url)
 
-# Padroniza nomes das colunas (maiúsculas e sem espaços nas extremidades)
+# Normaliza nomes das colunas
 df = df.rename(columns=lambda x: x.upper().strip())
 
-# Renomeia colunas essenciais
+# Renomeia a coluna certa para STATUS
 df = df.rename(columns={
-    "SITUACAO_TECNICO": "STATUS",
+    "STATUS CHECK LIST": "STATUS",
     "COORDENADOR": "COORDENADOR",
     "GERENTE": "GERENTE",
     "TECNICO": "TECNICO"
 })
 
-# Padroniza os valores da coluna STATUS para facilitar análise
+# Padroniza valores da coluna STATUS
 df["STATUS"] = df["STATUS"].astype(str).str.strip().str.upper()
-
-# Corrige valores específicos para OK e PENDENTE
 df["STATUS"] = df["STATUS"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
 
-# --- FILTROS ---
+# Filtros
 col1, col2 = st.columns(2)
 gerentes = sorted(df['GERENTE'].dropna().unique().tolist())
 coordenadores = sorted(df['COORDENADOR'].dropna().unique().tolist())
@@ -64,7 +62,7 @@ total = tabela_tecnicos.shape[0]
 pct_ok = round(ok / total * 100, 1) if total > 0 else 0
 pct_pend = round(pendentes / total * 100, 1) if total > 0 else 0
 
-# Exibe os KPIs com estilo
+# Exibe KPIs com estilo
 st.markdown(f"""
 <style>
 .kpi-container {{
