@@ -29,14 +29,24 @@ def carregar_dados():
     df = pd.read_excel(url, engine="openpyxl")
     return df
 
-def filtrar_ultimas_inspecoes_por_tecnico(df):
+def filtrar_ultimas_inspecoes_por_tecnico_produto(df):
     df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
     com_data = df[df["DATA_INSPECAO"].notna()]
-    ultimas = com_data.sort_values("DATA_INSPECAO").drop_duplicates(subset=["TÉCNICO"], keep="last")
-    tecnicos_com_inspecao = ultimas["TÉCNICO"].unique()
-    sem_data = df[~df["TÉCNICO"].isin(tecnicos_com_inspecao)]
-    sem_data_unicos = sem_data.drop_duplicates(subset=["TÉCNICO"])
-    return pd.concat([ultimas, sem_data_unicos], ignore_index=True)
+
+    # Última inspeção por técnico + produto
+    ultimas = (
+        com_data
+        .sort_values("DATA_INSPECAO")
+        .drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"], keep="last")
+    )
+
+    # Técnicos+produtos sem inspeção
+    todas_combinacoes = df.drop_duplicates(subset=["TÉCNICO", "PRODUTO_SIMILAR"])
+    nunca = todas_combinacoes[~todas_combinacoes.set_index(["TÉCNICO", "PRODUTO_SIMILAR"]).index.isin(
+        ultimas.set_index(["TÉCNICO", "PRODUTO_SIMILAR"]).index
+    )]
+
+    return pd.concat([ultimas, nunca], ignore_index=True)
 
 def gerar_download_excel(df):
     output = io.BytesIO()
@@ -45,10 +55,12 @@ def gerar_download_excel(df):
     b64 = base64.b64encode(output.getvalue()).decode()
     return f'<a href="data:application/octet-stream;base64,{b64}" download="inspecoes_pendentes.xlsx" class="download-btn">📥 Baixar Excel Pendentes</a>'
 
+# Título
 st.title("🦺 Painel de Inspeções EPI")
 
+# Carregar e tratar dados
 df_raw = carregar_dados()
-df_tratado = filtrar_ultimas_inspecoes_por_tecnico(df_raw)
+df_tratado = filtrar_ultimas_inspecoes_por_tecnico_produto(df_raw)
 
 # Filtros
 gerentes = sorted(df_tratado["GERENTE"].dropna().unique())
@@ -61,9 +73,11 @@ coordenador_sel = st.multiselect("Filtrar por Coordenador", coordenadores)
 
 df_filtrado = df_filtrado_ger if not coordenador_sel else df_filtrado_ger[df_filtrado_ger["COORDENADOR"].isin(coordenador_sel)]
 
+# Pendentes
 df_pendentes = df_filtrado[df_filtrado["DATA_INSPECAO"].isna()]
 df_pendentes["SALDO SGM TÉCNICO"] = df_pendentes["SALDO SGM TÉCNICO"].fillna("Não tem no saldo")
 
+# Botão de download
 st.markdown(gerar_download_excel(df_pendentes), unsafe_allow_html=True)
 
 # KPIs
@@ -73,6 +87,7 @@ pending = total - ok
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = 100 - pct_ok
 
+# KPIs visuais
 st.markdown("""
 <style>
 .kpi-container {
@@ -121,7 +136,7 @@ if len(df_filtrado) and len(coordenadores):
 else:
     st.info("Selecione um gerente e coordenador para visualizar o gráfico.")
 
-# Tabela sem a coluna SALDO SGM TÉCNICO
+# Tabela pendentes
 st.write("### Técnicos Pendentes")
 colunas = ["TÉCNICO", "FUNCAO", "PRODUTO_SIMILAR", "SUPERVISOR"]
 st.dataframe(df_pendentes[colunas].fillna(""), use_container_width=True)
