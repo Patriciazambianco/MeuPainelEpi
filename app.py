@@ -15,7 +15,6 @@ url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LIS
 df = pd.read_excel(url)
 df = df.rename(columns=lambda x: x.upper().strip())
 
-# Padroniza nomes
 df = df.rename(columns={
     "STATUS CHECK LIST": "STATUS",
     "GERENTE": "GERENTE",
@@ -33,11 +32,9 @@ df["STATUS"] = df["STATUS"].replace({
 
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors='coerce')
 
-# Última inspeção por técnico e produto
 df_ultimas = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False]) \
               .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
-# Resumo status por técnico
 status_por_tecnico = df_ultimas.groupby("TECNICO")["STATUS"].apply(list).reset_index()
 
 def resumo_status(lista):
@@ -51,18 +48,14 @@ def resumo_status(lista):
 
 status_por_tecnico["STATUS_RESUMO"] = status_por_tecnico["STATUS"].apply(resumo_status)
 
-# Todos técnicos da base (inclui quem nunca fez inspeção)
 todos_tecnicos = pd.DataFrame(df["TECNICO"].unique(), columns=["TECNICO"])
 
-# Junta para garantir todos técnicos
 status_tecnicos = todos_tecnicos.merge(status_por_tecnico[["TECNICO", "STATUS_RESUMO"]], on="TECNICO", how="left")
 status_tecnicos["STATUS_RESUMO"] = status_tecnicos["STATUS_RESUMO"].fillna("SEM INSPECAO")
 
-# Info de gerente e coordenador
 info_tecnicos = df[["TECNICO", "GERENTE", "COORDENADOR"]].drop_duplicates()
 status_tecnicos = status_tecnicos.merge(info_tecnicos, on="TECNICO", how="left")
 
-# Filtros
 col1, col2 = st.columns(2)
 gerentes = sorted(status_tecnicos['GERENTE'].dropna().unique())
 coordenadores = sorted(status_tecnicos['COORDENADOR'].dropna().unique())
@@ -78,7 +71,6 @@ if gerente_selecionado != "Todos":
 if coordenador_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_selecionado]
 
-# KPIs
 total = len(df_filtrado)
 ok = (df_filtrado["STATUS_RESUMO"] == "OK").sum()
 pendente = (df_filtrado["STATUS_RESUMO"] == "PENDENTE").sum()
@@ -88,7 +80,6 @@ pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pendente = round(pendente / total * 100, 1) if total else 0
 pct_sem = round(sem_inspecao / total * 100, 1) if total else 0
 
-# KPIs bonitões
 st.markdown(f"""
 <style>
 .kpi-container {{
@@ -119,10 +110,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Mostrar tabela dos técnicos filtrados
 st.dataframe(df_filtrado)
 
-# Botão para baixar Excel
 excel = gerar_excel_download(df_filtrado)
 st.download_button(
     label="⬇️ Baixar Status Técnicos",
