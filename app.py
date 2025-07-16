@@ -80,16 +80,34 @@ col1, col2 = st.columns(2)
 col1.metric("✅ Técnicos OK (total)", f"{total_ok} ({perc_ok:.1f}%)")
 col2.metric("⚠️ Técnicos Pendentes (total)", f"{total_pendente} ({perc_pendente:.1f}%)")
 
-# Gráfico barras OK vs Pendentes por coordenador
-fig = px.bar(
-    contagem_coord,
-    x="COORDENADOR",
-    y=["OK", "PENDENTE"],
-    title="Quantidade de Técnicos OK e Pendentes por Coordenador",
-    labels={"value": "Quantidade de Técnicos", "COORDENADOR": "Coordenador", "variable": "Status"},
-    color_discrete_map={"OK": "green", "PENDENTE": "red"},
-    barmode="group"
+# --- GRÁFICO COM % NAS BARRAS ---
+
+# Prepare dados para gráfico no formato longo (long format) para % OK e % PENDENTE
+df_grafico = contagem_coord.melt(
+    id_vars=["COORDENADOR"],
+    value_vars=["% OK", "% PENDENTE"],
+    var_name="STATUS",
+    value_name="PERCENTUAL"
 )
+
+# Ajustar nomes para legenda mais amigável
+df_grafico["STATUS"] = df_grafico["STATUS"].str.replace("% ", "").str.capitalize()
+
+fig = px.bar(
+    df_grafico,
+    x="COORDENADOR",
+    y="PERCENTUAL",
+    color="STATUS",
+    barmode="group",
+    text=df_grafico["PERCENTUAL"].apply(lambda x: f"{x:.1f}%"),
+    color_discrete_map={"Ok": "green", "Pendente": "red"},
+    labels={"COORDENADOR": "Coordenador", "PERCENTUAL": "Percentual (%)", "STATUS": "Status"},
+    title="Percentual de Técnicos OK e Pendentes por Coordenador"
+)
+
+fig.update_traces(textposition='outside')
+fig.update_layout(yaxis=dict(range=[0, 110]), uniformtext_minsize=8, uniformtext_mode='hide')
+
 st.plotly_chart(fig, use_container_width=True)
 
 # Tabela só dos técnicos pendentes (filtrada)
