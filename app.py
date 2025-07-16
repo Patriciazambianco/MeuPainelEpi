@@ -115,7 +115,7 @@ for STATUS_CHECK_LIST in todos_status:
         ranking[STATUS_CHECK_LIST] = 0
 
 total_coord = ranking[todos_status].sum(axis=1)
-for STATUS_CHECK_LISTin todos_status:
+for STATUS_CHECK_LIST in todos_status:
     ranking[STATUS_CHECK_LIST] = (ranking[STATUS_CHECK_LIST] / total_coord * 100).round(1)
 
 melted = ranking.melt(id_vars="COORDENADOR", var_name="STATUS_CHECK_LIST", value_name="PERCENTUAL")
