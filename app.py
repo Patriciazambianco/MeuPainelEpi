@@ -4,7 +4,7 @@ import plotly.express as px
 from io import BytesIO
 
 st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
-st.title("🦺 Painel de Técnicos OK e Pendentes por Coordenador")
+st.title("🦺 CHECK LIST EPI")
 
 # URL raw do Excel no GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
