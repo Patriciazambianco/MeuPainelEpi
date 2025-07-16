@@ -11,10 +11,14 @@ def gerar_excel_download(df):
     output.seek(0)
     return output
 
+# URL do Excel no GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
+
+# Carregar e tratar dados
 df = pd.read_excel(url)
 df = df.rename(columns=lambda x: x.upper().strip())
 
+# Renomeia colunas
 df = df.rename(columns={
     "STATUS CHECK LIST": "STATUS",
     "GERENTE": "GERENTE",
@@ -24,17 +28,19 @@ df = df.rename(columns={
     "DATA INSPECAO": "DATA_INSPECAO"
 })
 
+# Padroniza valores
 df["STATUS"] = df["STATUS"].astype(str).str.strip().str.upper()
 df["STATUS"] = df["STATUS"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
-
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors='coerce')
 
+# Última inspeção por técnico + produto
 df_ultimas = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False]) \
-              .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
+               .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
+# Resumo por técnico
 status_por_tecnico = df_ultimas.groupby("TECNICO")["STATUS"].apply(list).reset_index()
 
 def resumo_status(lista):
@@ -48,17 +54,23 @@ def resumo_status(lista):
 
 status_por_tecnico["STATUS_RESUMO"] = status_por_tecnico["STATUS"].apply(resumo_status)
 
+# Garantir todos os técnicos (inclusive sem inspeção)
 todos_tecnicos = pd.DataFrame(df["TECNICO"].unique(), columns=["TECNICO"])
-
 status_tecnicos = todos_tecnicos.merge(status_por_tecnico[["TECNICO", "STATUS_RESUMO"]], on="TECNICO", how="left")
 status_tecnicos["STATUS_RESUMO"] = status_tecnicos["STATUS_RESUMO"].fillna("SEM INSPECAO")
 
+# Juntar com GERENTE/COORDENADOR
 info_tecnicos = df[["TECNICO", "GERENTE", "COORDENADOR"]].drop_duplicates()
 status_tecnicos = status_tecnicos.merge(info_tecnicos, on="TECNICO", how="left")
 
+# Trata campos nulos pra não sumirem nos filtros
+status_tecnicos["GERENTE"] = status_tecnicos["GERENTE"].fillna("Não informado")
+status_tecnicos["COORDENADOR"] = status_tecnicos["COORDENADOR"].fillna("Não informado")
+
+# Filtros
 col1, col2 = st.columns(2)
-gerentes = sorted(status_tecnicos['GERENTE'].dropna().unique())
-coordenadores = sorted(status_tecnicos['COORDENADOR'].dropna().unique())
+gerentes = sorted(status_tecnicos['GERENTE'].unique())
+coordenadores = sorted(status_tecnicos['COORDENADOR'].unique())
 
 with col1:
     gerente_selecionado = st.selectbox("Filtrar por GERENTE:", ["Todos"] + gerentes)
@@ -71,15 +83,20 @@ if gerente_selecionado != "Todos":
 if coordenador_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_selecionado]
 
-total = len(df_filtrado)
-ok = (df_filtrado["STATUS_RESUMO"] == "OK").sum()
-pendente = (df_filtrado["STATUS_RESUMO"] == "PENDENTE").sum()
-sem_inspecao = (df_filtrado["STATUS_RESUMO"] == "SEM INSPECAO").sum()
+# Cálculo certo: 1 linha por técnico
+df_filtrado = df_filtrado.drop_duplicates(subset=["TECNICO"])
+
+# KPIs
+total = df_filtrado["TECNICO"].nunique()
+ok = df_filtrado[df_filtrado["STATUS_RESUMO"] == "OK"]["TECNICO"].nunique()
+pendente = df_filtrado[df_filtrado["STATUS_RESUMO"] == "PENDENTE"]["TECNICO"].nunique()
+sem_inspecao = df_filtrado[df_filtrado["STATUS_RESUMO"] == "SEM INSPECAO"]["TECNICO"].nunique()
 
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pendente = round(pendente / total * 100, 1) if total else 0
 pct_sem = round(sem_inspecao / total * 100, 1) if total else 0
 
+# KPIs estilosos 😎
 st.markdown(f"""
 <style>
 .kpi-container {{
@@ -110,6 +127,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# Tabela e botão de download
 st.dataframe(df_filtrado)
 
 excel = gerar_excel_download(df_filtrado)
