@@ -117,7 +117,7 @@ if modo_percentual:
         labels={"value": "%", "variable": "Status"},
         height=400,
         text_auto=".1f"
-    )
+        }
     fig_rank.update_layout(yaxis_title="%")
 else:
     ranking = (
