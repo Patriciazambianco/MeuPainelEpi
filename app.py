@@ -46,7 +46,7 @@ status_tecnico["CLASSIFICACAO"] = status_tecnico["STATUS"].apply(classificar_tec
 
 # Junta com os dados de coordenador e gerente
 df_class = pd.merge(
-    status_tecnico[["TECNICO", "CLASSIFICACAO"],],
+    status_tecnico[["TECNICO", "CLASSIFICACAO"]],
     df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates(),
     on="TECNICO",
     how="left"
