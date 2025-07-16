@@ -122,7 +122,7 @@ else:
     fig_rank = px.bar(
         ranking,
         x="COORDENADOR",
-        y=["OK", "PENDENTE", "SEM_INSPECAO"],
+        y=["OK", "PENDENTE"],
         barmode="group",
         title="Total de Técnicos por Coordenador",
         labels={"value": "Qtd", "variable": "Status"},
