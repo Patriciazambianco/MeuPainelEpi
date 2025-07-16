@@ -23,7 +23,7 @@ df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
 # Converter data para datetime, ignorando erros
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Preencher tecnicos e produtos únicos para considerar sem inspeção (pendentes)
+# Preencher técnicos e produtos únicos para considerar pendentes (sem inspeção)
 tecnicos_produtos = df[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]].drop_duplicates()
 
 # Última inspeção por técnico + produto
@@ -34,7 +34,7 @@ df_ult = (
       [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR", "GERENTE"]]
 )
 
-# Juntar tudo para incluir técnicos sem inspeção (sem linha em df_ult) com status 'PENDENTE'
+# Juntar tudo pra incluir técnicos sem inspeção com status 'PENDENTE'
 df_completo = pd.merge(tecnicos_produtos, df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO"]],
                        on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 
@@ -54,8 +54,12 @@ if gerente_sel != "Todos":
 if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
-# Classificar por técnico + dia (considerar se TODOS produtos do técnico no dia estão OK ou se algum pendente)
-status_diario = df_filtrado.groupby(["TECNICO", "DATA_INSPECAO"])["STATUS"].apply(list).reset_index()
+# Classificar por técnico + dia + coordenador (pra manter o coordenador no agrupamento)
+status_diario = (
+    df_filtrado.groupby(["COORDENADOR", "TECNICO", "DATA_INSPECAO"])["STATUS"]
+    .apply(list)
+    .reset_index()
+)
 
 def classifica_dia(status_list):
     if all(s == "OK" for s in status_list):
@@ -66,7 +70,12 @@ def classifica_dia(status_list):
 status_diario["CLASSIFICACAO"] = status_diario["STATUS"].apply(classifica_dia)
 
 # Evolução: contar técnicos OK e Pendentes por coordenador e data
-evolucao = status_diario.groupby(["COORDENADOR", "DATA_INSPECAO", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
+evolucao = (
+    status_diario.groupby(["COORDENADOR", "DATA_INSPECAO", "CLASSIFICACAO"])
+    .size()
+    .unstack(fill_value=0)
+    .reset_index()
+)
 
 # Garantir colunas para OK e PENDENTE
 for col in ["OK", "PENDENTE"]:
@@ -119,7 +128,7 @@ for trace in fig.data:
     elif "PENDENTE" in trace.name:
         trace.line.color = "red"
 
-# Mostrar valores %
+# Mostrar valores % nos pontos
 fig.update_traces(texttemplate='%{y:.1f}%', textposition='top center', textfont=dict(size=9))
 
 st.plotly_chart(fig, use_container_width=True)
