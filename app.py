@@ -5,6 +5,21 @@ from io import BytesIO
 
 st.set_page_config(page_title="Painel Técnico - EPI", layout="wide")
 
+# 🎨 Estilo customizado com fundo colorido
+st.markdown(
+    """
+    <style>
+    body {
+        background-color: #f0f2f6;
+    }
+    .stApp {
+        background-color: #f0f2f6;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Título
 title = "📊 Painel de Inspeções Técnicas - EPI 🛠️"
 st.title(title)
@@ -24,12 +39,14 @@ df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
 })
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Última inspeção por técnico
+# Última inspeção por técnico + produto
 ultima = df.sort_values(["TECNICO", "DATA_INSPECAO"], ascending=[True, False])
 ultima = ultima.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
-# Técnicos com e sem inspeção
-tecnicos = df[["TECNICO", "COORDENADOR", "GERENTE", "PRODUTO_SIMILAR"]].drop_duplicates()
+# Técnicos com e sem inspeção (garantir 1 linha por técnico + produto)
+tecnicos = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="last")[
+    ["TECNICO", "COORDENADOR", "GERENTE", "PRODUTO_SIMILAR"]
+]
 df_completo = pd.merge(tecnicos, ultima[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]], on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
