@@ -12,8 +12,8 @@ df.columns = df.columns.str.upper().str.strip()
 df = df.rename(columns={"STATUS CHECK LIST": "STATUS", "DATA INSPECAO": "DATA_INSPECAO"})
 
 # Padroniza status e data
-df["CHECK LIST OK"] = df["CHECK LIST OK"].astype(str).str.upper().str.strip()
-df["CHECK LIST OK"] = df["CHECK LIST OK"].replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
+df["STATUS CHECK LIST"] = df["CHECK LIST OK"].astype(str).str.upper().str.strip()
+df["STATUS CHECK LIST"] = df["CHECK LIST OK"].replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
 # Última inspeção por técnico + produto
