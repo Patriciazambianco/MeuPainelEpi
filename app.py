@@ -136,7 +136,7 @@ if page == "Ranking por Coordenador":
     fig_rank = px.bar(melted, x="COORDENADOR", y="PERCENTUAL", color="STATUS",
                       barmode="stack", text_auto=True,
                       title="Distribuição (%) por Coordenador",
-                      color_discrete_map={"OK": "green", "PENDENTE": "red})
+                      color_discrete_map={"OK": "green", "PENDENTE": "red"})
     st.plotly_chart(fig_rank, use_container_width=True)
 
 if page == "Ranking por Produto":
