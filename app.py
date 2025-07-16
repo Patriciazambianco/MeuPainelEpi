@@ -3,33 +3,27 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-st.set_page_config(page_title="Painel EPI - Evolução %", layout="wide")
-st.title("🦺 Painel de Inspeções EPI - Evolução de Técnicos OK e Pendentes")
+st.set_page_config(page_title="Painel EPI - Evolução por Coordenador", layout="wide")
+st.title("🦺 Evolução diária de Técnicos OK e Pendentes por Coordenador")
 
-# URL raw do arquivo Excel no GitHub
+# URL do Excel no GitHub (raw)
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# Padronizar nomes das colunas
+# Padronização colunas e dados
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
-
-# Padronizar a coluna STATUS_CHECK_LIST
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
-
-# Mapear para simplificar status
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
-
-# Converter data inspeção para datetime, ignorando erros
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Padronizar strings para evitar erro no filtro
+# Strip para evitar erros no filtro
 df["GERENTE"] = df["GERENTE"].astype(str).str.strip()
 df["COORDENADOR"] = df["COORDENADOR"].astype(str).str.strip()
 
-# Filtrar linhas com técnico, produto e data inspeção
+# Filtrar linhas válidas
 df_valid = df.dropna(subset=["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"])
 
 # Sidebar filtros
@@ -46,60 +40,84 @@ if gerente_sel != "Todos":
 if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
-# Debug: mostra dados filtrados
-st.write("### Dados filtrados após seleção")
-st.dataframe(df_filtrado.head(10))
-
-# Obter última inspeção por técnico + produto
+# Última inspeção por técnico + produto
 df_ult = (
     df_filtrado.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
               .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
-              [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO"]]
+              [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR"]]
 )
 
-# Classificação diária por técnico (OK se todos produtos OK no dia, senão PENDENTE)
-status_diario = df_ult.groupby(["TECNICO", "DATA_INSPECAO"])["STATUS"].apply(list).reset_index()
+# Classifica o dia por técnico: OK se TODOS produtos OK, senão Pendente
+status_diario = df_ult.groupby(["COORDENADOR", "TECNICO", "DATA_INSPECAO"])["STATUS"].apply(list).reset_index()
 
 def classifica_dia(status_list):
     return "OK" if all(s == "OK" for s in status_list) else "PENDENTE"
 
 status_diario["CLASSIFICACAO"] = status_diario["STATUS"].apply(classifica_dia)
 
-# Agrupar por data para contar técnicos OK e Pendentes por dia
-evolucao = status_diario.groupby(["DATA_INSPECAO", "CLASSIFICACAO"]).size().unstack(fill_value=0)
+# Agora agrupamos por coordenador + data + status, contando técnicos
+evolucao = (
+    status_diario.groupby(["COORDENADOR", "DATA_INSPECAO", "CLASSIFICACAO"])
+    .size()
+    .unstack(fill_value=0)
+    .reset_index()
+)
 
-# Calcular total e percentuais
-evolucao["TOTAL"] = evolucao.sum(axis=1)
+# Total técnicos por coordenador e data
+evolucao["TOTAL"] = evolucao.get("OK", 0) + evolucao.get("PENDENTE", 0)
+
+# Percentuais por coordenador e data
 evolucao["% OK"] = (evolucao.get("OK", 0) / evolucao["TOTAL"]) * 100
 evolucao["% PENDENTE"] = (evolucao.get("PENDENTE", 0) / evolucao["TOTAL"]) * 100
-evolucao = evolucao.reset_index()
 
-# Debug: mostra evolução
-st.write("### Evolução diária (últimos dias)")
-st.dataframe(evolucao.tail(10))
-
-# Mostrar cards com os valores mais recentes, se existirem dados
+# Mostrar cards do último dia geral (considerando filtros)
 if not evolucao.empty:
-    ultimo = evolucao.iloc[-1]
-    col1, col2 = st.columns(2)
-    col1.metric("✅ Último % Técnicos 100% OK", f"{ultimo['% OK']:.1f}%")
-    col2.metric("⚠️ Último % Técnicos Pendentes", f"{ultimo['% PENDENTE']:.1f}%")
+    ultimo_dia = evolucao["DATA_INSPECAO"].max()
+    ultimos = evolucao[evolucao["DATA_INSPECAO"] == ultimo_dia]
+    pct_ok_geral = (ultimos["OK"].sum() / ultimos["TOTAL"].sum()) * 100
+    pct_pendente_geral = (ultimos["PENDENTE"].sum() / ultimos["TOTAL"].sum()) * 100
+    c1, c2 = st.columns(2)
+    c1.metric("✅ Último % Técnicos 100% OK", f"{pct_ok_geral:.1f}%")
+    c2.metric("⚠️ Último % Técnicos Pendentes", f"{pct_pendente_geral:.1f}%")
 else:
-    st.warning("Sem dados suficientes para mostrar métricas.")
+    st.warning("Sem dados para mostrar métricas.")
 
-# Plotar gráfico da evolução
-fig_evolucao = px.line(
-    evolucao, x="DATA_INSPECAO", y=["% OK", "% PENDENTE"],
-    labels={"DATA_INSPECAO": "Data", "value": "Percentual (%)", "variable": "Status"},
-    title="Evolução diária do percentual de Técnicos OK e Pendentes"
-)
-fig_evolucao.update_traces(mode="lines+markers")
-fig_evolucao.update_layout(yaxis=dict(range=[0, 100]), legend_title_text="Status")
-fig_evolucao.for_each_trace(
-    lambda t: t.update(line_color="green") if t.name == "% OK" else t.update(line_color="red")
+# Filtro extra para coordenador no gráfico (se quiser só um coordenador)
+coordenadores_graf = evolucao["COORDENADOR"].unique().tolist()
+coord_graf_sel = st.sidebar.multiselect("Selecionar Coordenador(s) para o gráfico", coordenadores_graf, default=coordenadores_graf)
+
+# Filtra para o gráfico
+evolucao_graf = evolucao[evolucao["COORDENADOR"].isin(coord_graf_sel)]
+
+# Plotar gráfico da evolução com percentual por coordenador
+fig = px.line(
+    evolucao_graf,
+    x="DATA_INSPECAO",
+    y=["% OK", "% PENDENTE"],
+    color="COORDENADOR",
+    line_dash="CLASSIFICACAO",
+    labels={
+        "DATA_INSPECAO": "Data",
+        "value": "Percentual (%)",
+        "variable": "Status",
+        "COORDENADOR": "Coordenador"
+    },
+    title="Evolução diária % Técnicos OK e Pendentes por Coordenador"
 )
 
-st.plotly_chart(fig_evolucao, use_container_width=True)
+fig.update_traces(mode="lines+markers")
+fig.update_layout(yaxis=dict(range=[0, 100]), legend_title_text="Legenda")
+# Ajusta cores OK verde, PENDENTE vermelho
+for trace in fig.data:
+    if "% OK" in trace.name:
+        trace.line.color = "green"
+    elif "% PENDENTE" in trace.name:
+        trace.line.color = "red"
+
+# Adiciona os valores percentuais nos pontos
+fig.update_traces(texttemplate='%{y:.1f}%', textposition='top center', textfont=dict(size=9))
+
+st.plotly_chart(fig, use_container_width=True)
 
 # Função para exportar dataframe para Excel
 def to_excel(df):
