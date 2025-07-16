@@ -33,6 +33,7 @@ def classificar_status(status_list):
     else:
         return "SEM INSPECAO"
 
+# Corrige: conta um status por técnico (após agrupar por TECNICO)
 status_tecnicos = df_final.groupby(["TECNICO", "GERENTE", "COORDENADOR"])["STATUS"] \
                           .apply(classificar_status).reset_index(name="STATUS_RESUMO")
 
@@ -40,13 +41,13 @@ status_tecnicos = df_final.groupby(["TECNICO", "GERENTE", "COORDENADOR"])["STATU
 ok = (status_tecnicos["STATUS_RESUMO"] == "OK").sum()
 pend = (status_tecnicos["STATUS_RESUMO"] == "PENDENTE").sum()
 sem = (status_tecnicos["STATUS_RESUMO"] == "SEM INSPECAO").sum()
-total = len(status_tecnicos)
+total = ok + pend + sem
 
 st.markdown("## Indicadores Gerais")
 col1, col2, col3 = st.columns(3)
-col1.metric("Técnicos OK", ok, f"{ok/total:.0%}")
-col2.metric("Pendentes", pend, f"{pend/total:.0%}")
-col3.metric("Sem inspeção", sem, f"{sem/total:.0%}")
+col1.metric("Técnicos OK", ok, f"{ok/total:.0%}" if total else "0%")
+col2.metric("Pendentes", pend, f"{pend/total:.0%}" if total else "0%")
+col3.metric("Sem inspeção", sem, f"{sem/total:.0%}" if total else "0%")
 
 # Gráfico de pizza
 status_count = status_tecnicos["STATUS_RESUMO"].value_counts().reset_index()
@@ -54,9 +55,9 @@ status_count.columns = ["STATUS", "QTD"]
 fig_pizza = px.pie(status_count, names="STATUS", values="QTD", title="Distribuição de Status")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
-# Ranking por gerente
-ranking = status_tecnicos.groupby("GERENTE")["STATUS_RESUMO"].value_counts().unstack().fillna(0)
-fig_ranking = px.bar(ranking, title="Ranking por Gerente", barmode="group")
+# Ranking por coordenador (não gerente)
+ranking = status_tecnicos.groupby("COORDENADOR")["STATUS_RESUMO"].value_counts().unstack().fillna(0)
+fig_ranking = px.bar(ranking, title="Ranking por Coordenador", barmode="group")
 st.plotly_chart(fig_ranking, use_container_width=True)
 
 # Exibir tabela final
