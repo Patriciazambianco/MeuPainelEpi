@@ -7,38 +7,38 @@ st.set_page_config(page_title="Painel EPI", layout="wide")
 st.title("🦺 Painel de Inspeções EPI")
 st.markdown("---")
 
-# 🚀 Lê do GitHub
+# Lê Excel direto do GitHub (raw)
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# 🧼 Limpeza de colunas
+# Limpeza das colunas
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# ✅ Corrige coluna STATUS com regra flexível
-def mapear_status(valor):
-    if "OK" in valor:
+# Mapeia os status para valores fixos
+def mapear_status(x):
+    if "OK" in x:
         return "OK"
-    elif "PENDENTE" in valor:
+    elif "PENDENTE" in x:
         return "PENDENTE"
     else:
         return None
 
 df["STATUS"] = df["STATUS_CHECK_LIST"].apply(mapear_status)
 
-# 🎯 Última inspeção por técnico/produto
+# Última inspeção por técnico e produto
 ultima_inspecao = (
     df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
     .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 )
 
-# 🔗 Todos os técnicos + produtos possíveis
+# Todos os pares técnico + produto possíveis
 todos_pares = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[
     ["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]
 ]
 
-# 🧩 Junta tudo
+# Junta para garantir técnicos sem inspeção
 df_completo = pd.merge(
     todos_pares,
     ultima_inspecao[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
@@ -48,7 +48,7 @@ df_completo = pd.merge(
 
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# 💡 Classificação geral por técnico
+# Função para classificar técnico considerando todos seus produtos
 def classificar(lista_status):
     status_set = set(lista_status)
     if status_set == {"OK"}:
@@ -61,30 +61,29 @@ def classificar(lista_status):
 status_tecnico = df_completo.groupby("TECNICO")["STATUS"].agg(list).reset_index()
 status_tecnico["CLASSIFICACAO"] = status_tecnico["STATUS"].apply(classificar)
 
-# Junta com COORDENADOR/GERENTE
-df_class = pd.merge(
+# Junta coordenador e gerente
+df_final = pd.merge(
     status_tecnico,
     df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates(),
     on="TECNICO",
     how="left"
 )
 
-# 🎛️ Filtros no sidebar
+# --- FILTROS ---
 with st.sidebar:
-    st.header("🎛️ Filtros")
-    gerente = st.selectbox("Filtrar por Gerente", ["Todos"] + sorted(df_class["GERENTE"].dropna().unique()))
-    coordenador = st.selectbox("Filtrar por Coordenador", ["Todos"] + sorted(df_class["COORDENADOR"].dropna().unique()))
+    st.header("Filtros")
+    gerente = st.selectbox("Filtrar por Gerente", ["Todos"] + sorted(df_final["GERENTE"].dropna().unique()))
+    coordenador = st.selectbox("Filtrar por Coordenador", ["Todos"] + sorted(df_final["COORDENADOR"].dropna().unique()))
     status_sel = st.multiselect("Status", ["OK", "PENDENTE", "SEM_INSPECAO"], default=["OK", "PENDENTE", "SEM_INSPECAO"])
 
-# Filtro aplicado
-df_filt = df_class.copy()
+df_filt = df_final.copy()
 if gerente != "Todos":
     df_filt = df_filt[df_filt["GERENTE"] == gerente]
 if coordenador != "Todos":
     df_filt = df_filt[df_filt["COORDENADOR"] == coordenador]
 df_filt = df_filt[df_filt["CLASSIFICACAO"].isin(status_sel)]
 
-# 📊 Indicadores
+# Indicadores
 total = len(df_filt)
 ok = (df_filt["CLASSIFICACAO"] == "OK").sum()
 pend = (df_filt["CLASSIFICACAO"] == "PENDENTE").sum()
@@ -96,10 +95,10 @@ pct_sem = round(sem / total * 100, 1) if total else 0
 
 col1, col2, col3 = st.columns(3)
 col1.metric("✅ Técnicos 100% OK", ok, f"{pct_ok}%")
-col2.metric("⚠️ Com Pendências", pend, f"{pct_pend}%")
-col3.metric("❌ Sem Inspeção", sem, f"{pct_sem}%")
+col2.metric("⚠️ Técnicos com Pendências", pend, f"{pct_pend}%")
+col3.metric("❌ Técnicos sem Inspeção", sem, f"{pct_sem}%")
 
-# 🥧 Gráfico de Pizza
+# Gráfico de pizza
 pizza = df_filt["CLASSIFICACAO"].value_counts().reindex(["OK", "PENDENTE", "SEM_INSPECAO"], fill_value=0).reset_index()
 pizza.columns = ["STATUS", "QTD"]
 fig_pie = px.pie(
@@ -109,17 +108,16 @@ fig_pie = px.pie(
 )
 st.plotly_chart(fig_pie, use_container_width=True)
 
-# 📊 Ranking por Coordenador com %
+# Ranking por coordenador (em %)
 ranking = df_filt.groupby(["COORDENADOR", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
 
-# Preenche colunas faltantes
 for status in ["OK", "PENDENTE", "SEM_INSPECAO"]:
     if status not in ranking.columns:
         ranking[status] = 0
 
-total_coord = ranking[["OK", "PENDENTE", "SEM_INSPECAO"]].sum(axis=1)
+ranking["TOTAL"] = ranking[["OK", "PENDENTE", "SEM_INSPECAO"]].sum(axis=1)
 for status in ["OK", "PENDENTE", "SEM_INSPECAO"]:
-    ranking[status] = (ranking[status] / total_coord * 100).round(1)
+    ranking[status] = (ranking[status] / ranking["TOTAL"] * 100).round(1)
 
 melted = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name="PERCENTUAL")
 fig_bar = px.bar(
@@ -130,12 +128,13 @@ fig_bar = px.bar(
 fig_bar.update_traces(textposition="inside")
 st.plotly_chart(fig_bar, use_container_width=True)
 
-# 📥 Exporta Excel
+# Botão para baixar Excel
 def gerar_excel(df):
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Dados")
-    buffer.seek(0)
-    return buffer
+    output.seek(0)
+    return output
 
 st.download_button("⬇️ Baixar Excel", gerar_excel(df_filt), file_name="painel_epi.xlsx")
+
