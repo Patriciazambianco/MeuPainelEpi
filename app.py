@@ -59,7 +59,6 @@ df_filtro = df_filtro[df_filtro["STATUS"].isin(status_opcao)]
 total = len(df_filtro)
 ok = (df_filtro["STATUS"] == "OK").sum()
 pend = (df_filtro["STATUS"] == "PENDENTE").sum()
-sem = (df_filtro["STATUS"] == "SEM_INSPECAO").sum()
 
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = round(pend / total * 100, 1) if total else 0
@@ -71,7 +70,18 @@ col2.metric("⚠️ Pendentes", pend, f"{pct_pend}%")
 # 8. Pizza
 pizza = df_filtro["STATUS"].value_counts().reset_index()
 pizza.columns = ["STATUS", "QTD"]
-fig_pie = px.pie(pizza, names="STATUS", values="QTD", title="Distribuição de Técnicos")
+fig_pie = px.pie(
+    pizza,
+    names="STATUS",
+    values="QTD",
+    title="Distribuição de Técnicos",
+    color="STATUS",
+    color_discrete_map={
+        "OK": "green",
+        "PENDENTE": "red",
+        }
+)
+
 st.plotly_chart(fig_pie, use_container_width=True)
 
 # 9. Toggle modo percentual x absoluto
@@ -93,15 +103,15 @@ if modo_percentual:
         .unstack(fill_value=0)
         .reset_index()
     )
-    for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
+    for col in ["OK", "PENDENTE"]:
         if col not in ranking.columns:
             ranking[col] = 0
-    ranking[["OK", "PENDENTE", "SEM_INSPECAO"]] *= 100
+    ranking[["OK", "PENDENTE"]] *= 100
 
     fig_rank = px.bar(
         ranking,
         x="COORDENADOR",
-        y=["OK", "PENDENTE", "SEM_INSPECAO"],
+        y=["OK", "PENDENTE"],
         barmode="stack",
         title="Distribuição (%) por Coordenador",
         labels={"value": "%", "variable": "Status"},
@@ -117,19 +127,22 @@ else:
         .unstack(fill_value=0)
         .reset_index()
     )
-    for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
+    for col in ["OK", "PENDENTE"]:
         if col not in ranking.columns:
             ranking[col] = 0
 
     fig_rank = px.bar(
         ranking,
         x="COORDENADOR",
-        y=["OK", "PENDENTE", "SEM_INSPECAO"],
+        y=["OK", "PENDENTE"],
         barmode="group",
         title="Total de Técnicos por Coordenador",
         labels={"value": "Qtd", "variable": "Status"},
         height=400,
         text_auto=True
+        color_discrete_map={
+        "OK": "green",
+        "PENDENTE": "red"
     )
     fig_rank.update_layout(yaxis_title="Qtd")
 
