@@ -5,25 +5,27 @@ from io import BytesIO
 
 st.set_page_config(page_title="Painel EPI com Gráficos", layout="wide")
 
-# Carrega os dados
+# Carrega os dados direto do GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 df.columns = df.columns.str.upper().str.strip()
 df = df.rename(columns={"STATUS CHECK LIST": "STATUS", "DATA INSPECAO": "DATA_INSPECAO"})
-df["STATUS CHECK LIST"] = df["STATUS CHECK LIST"].astype(str).str.upper().str.strip()
-df["STATUS CHECK LIST"] = df["STATUS CHECK LIST"].replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
+
+# Padroniza status e data
+df["STATUS"] = df["STATUS"].astype(str).str.upper().str.strip()
+df["STATUS"] = df["STATUS"].replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Pega a última inspeção por TECNICO + PRODUTO
+# Última inspeção por técnico + produto
 df_ultimas = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False]) \
                .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
-# Base completa para garantir todos TECNICO + PRODUTO
+# Base completa técnico + produto (para garantir todos)
 df_base = df[["TECNICO", "PRODUTO_SIMILAR", "GERENTE", "COORDENADOR"]].drop_duplicates()
-df_final = pd.merge(df_base, df_ultimas[["TECNICO", "PRODUTO_SIMILAR", "STATUS CHECK LIST"]], 
+df_final = pd.merge(df_base, df_ultimas[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]], 
                     on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 
-# Classifica status final por técnico
+# Classifica o status final do técnico
 def classificar_status(statuses):
     if statuses.isna().all():
         return "SEM INSPECAO"
@@ -33,7 +35,7 @@ def classificar_status(statuses):
         return "OK"
     return "SEM INSPECAO"
 
-status_tecnicos = df_final.groupby(["TECNICO", "GERENTE", "COORDENADOR"])["STATUS CHECK LIST"] \
+status_tecnicos = df_final.groupby(["TECNICO", "GERENTE", "COORDENADOR"])["STATUS"] \
     .apply(classificar_status).reset_index(name="STATUS_RESUMO")
 
 # Filtros interativos
@@ -73,17 +75,28 @@ status_count.columns = ["STATUS", "QTD"]
 fig_pizza = px.pie(status_count, names="STATUS", values="QTD", title="Distribuição de Status")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
-# Gráfico por coordenador
-ranking = df_filtered.groupby("COORDENADOR")["STATUS_RESUMO"].value_counts().unstack().fillna(0).reset_index()
-fig_ranking = px.bar(ranking, x="COORDENADOR", y=["OK", "PENDENTE", "SEM INSPECAO"],
-                     title="Ranking por Coordenador", barmode="group")
+# Ranking por coordenador - corrigido para evitar erro
+ranking = df_filtered.groupby("COORDENADOR")["STATUS_RESUMO"].value_counts().unstack(fill_value=0).reset_index()
+
+# Garante colunas OK, PENDENTE e SEM INSPECAO
+for status in ["OK", "PENDENTE", "SEM INSPECAO"]:
+    if status not in ranking.columns:
+        ranking[status] = 0
+
+fig_ranking = px.bar(
+    ranking,
+    x="COORDENADOR",
+    y=["OK", "PENDENTE", "SEM INSPECAO"],
+    title="Ranking por Coordenador",
+    barmode="group",
+)
 st.plotly_chart(fig_ranking, use_container_width=True)
 
 # Tabela detalhada
 st.markdown("### Tabela Detalhada")
 st.dataframe(df_filtered)
 
-# Botão de download
+# Botão para download Excel
 def gerar_excel_download(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
