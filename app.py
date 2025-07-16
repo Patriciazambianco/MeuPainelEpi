@@ -29,9 +29,19 @@ tecnicos = df[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates()
 df_completo = pd.merge(tecnicos, df_ultimos[["TECNICO", "STATUS"]], on="TECNICO", how="left")
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# 6. Filtros: coordenador e status
-coord_opcoes = ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique())
-coord = st.selectbox("📌 Filtrar por Coordenador", coord_opcoes)
+# 6. Filtros: Gerente > Coordenador > Status
+gerente_opcoes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
+gerente = st.selectbox("🔹 Filtrar por Gerente", gerente_opcoes)
+
+df_filtro = df_completo.copy()
+if gerente != "Todos":
+    df_filtro = df_filtro[df_filtro["GERENTE"] == gerente]
+
+coord_opcoes = ["Todos"] + sorted(df_filtro["COORDENADOR"].dropna().unique())
+coordenador = st.selectbox("🔸 Filtrar por Coordenador", coord_opcoes)
+
+if coordenador != "Todos":
+    df_filtro = df_filtro[df_filtro["COORDENADOR"] == coordenador]
 
 status_opcao = st.multiselect(
     "🎯 Filtrar por Status",
@@ -39,9 +49,6 @@ status_opcao = st.multiselect(
     default=["OK", "PENDENTE", "SEM_INSPECAO"]
 )
 
-df_filtro = df_completo.copy()
-if coord != "Todos":
-    df_filtro = df_filtro[df_filtro["COORDENADOR"] == coord]
 df_filtro = df_filtro[df_filtro["STATUS"].isin(status_opcao)]
 
 # 7. Indicadores
@@ -68,9 +75,17 @@ st.plotly_chart(fig_pie, use_container_width=True)
 # 9. Toggle modo percentual x absoluto
 modo_percentual = st.toggle("🔁 Ver gráfico por percentual (%)", value=True)
 
+# Para gráfico de coordenadores vamos usar o df_completo filtrado por gerente,
+# para refletir o filtro geral, então filtramos o df_completo aqui também
+df_grafico = df_completo.copy()
+if gerente != "Todos":
+    df_grafico = df_grafico[df_grafico["GERENTE"] == gerente]
+if coordenador != "Todos":
+    df_grafico = df_grafico[df_grafico["COORDENADOR"] == coordenador]
+
 if modo_percentual:
     ranking = (
-        df_completo
+        df_grafico
         .groupby("COORDENADOR")["STATUS"]
         .value_counts(normalize=True)
         .unstack(fill_value=0)
@@ -94,7 +109,7 @@ if modo_percentual:
     fig_rank.update_layout(yaxis_title="%")
 else:
     ranking = (
-        df_completo
+        df_grafico
         .groupby("COORDENADOR")["STATUS"]
         .value_counts()
         .unstack(fill_value=0)
