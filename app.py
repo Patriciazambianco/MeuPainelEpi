@@ -2,121 +2,121 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from io import BytesIO
-import time
 
-st.set_page_config(page_title="Painel EPI - Evolução %", layout="wide")
-st.title("🦺 Painel de Inspeções EPI - Evolução de Técnicos OK e Pendentes")
+st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
+st.title("🦺 Painel de Técnicos OK e Pendentes por Coordenador")
 
-# URL do Excel no GitHub
+# URL raw do Excel no GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# Padronização
-colunas_renomeadas = df.columns.str.upper().str.strip().str.replace(" ", "_")
-df.columns = colunas_renomeadas
+# Padronizar colunas
+df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
+# Padronizar e mapear STATUS_CHECK_LIST
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
 
+# Converter data para datetime (ignorar erros)
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Técnicos + Produtos únicos (pra identificar quem não teve inspeção)
+# Preencher técnicos e produtos únicos para garantir inclusão de quem não tem inspeção
 tecnicos_produtos = df[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]].drop_duplicates()
 
-# Pegar última inspeção de cada técnico + produto
+# Última inspeção por técnico + produto
 df_ult = (
     df.dropna(subset=["DATA_INSPECAO"])
       .sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
       .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
-      [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO"]]
+      [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR", "GERENTE"]]
 )
 
-# Merge para incluir quem não fez inspeção
-df_completo = pd.merge(tecnicos_produtos, df_ult,
+# Merge pra incluir técnicos sem inspeção com status PENDENTE
+df_completo = pd.merge(tecnicos_produtos, df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
                        on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
+
 df_completo["STATUS"] = df_completo["STATUS"].fillna("PENDENTE")
 
-# === SIDEBAR ===
+# Filtros sidebar: Gerente e Coordenador
 st.sidebar.header("Filtros")
-lista_gerentes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
-lista_coord = ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique())
+gerentes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
+coordenadores = ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique())
+gerente_sel = st.sidebar.selectbox("Gerente", gerentes)
+coordenador_sel = st.sidebar.selectbox("Coordenador", coordenadores)
 
-filtro_gerente = st.sidebar.selectbox("Gerente", lista_gerentes)
-filtro_coord = st.sidebar.selectbox("Coordenador", lista_coord)
+df_filtrado = df_completo.copy()
+if gerente_sel != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_sel]
+if coordenador_sel != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
-# Aplica os filtros
-df_filt = df_completo.copy()
-if filtro_gerente != "Todos":
-    df_filt = df_filt[df_filt["GERENTE"] == filtro_gerente]
-if filtro_coord != "Todos":
-    df_filt = df_filt[df_filt["COORDENADOR"] == filtro_coord]
+# Contar técnicos OK e Pendentes por coordenador
+contagem_coord = df_filtrado.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0)
 
-# Classificação por técnico + dia
-status_dia = df_filt.groupby(["TECNICO", "DATA_INSPECAO"])["STATUS"].apply(list).reset_index()
-def classifica(lista):
-    if all(s == "OK" for s in lista):
-        return "OK"
-    return "PENDENTE"
-status_dia["CLASSIFICACAO"] = status_dia["STATUS"].apply(classifica)
-
-# Evolução por Coordenador + Data
-evolucao = status_dia.merge(df_filt[["TECNICO", "COORDENADOR"]].drop_duplicates(), on="TECNICO")
-evolucao = evolucao.groupby(["COORDENADOR", "DATA_INSPECAO", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
-
-# Garante colunas
+# Garantir colunas OK e PENDENTE existam
 for col in ["OK", "PENDENTE"]:
-    if col not in evolucao.columns:
-        evolucao[col] = 0
+    if col not in contagem_coord.columns:
+        contagem_coord[col] = 0
 
-evolucao["TOTAL"] = evolucao["OK"] + evolucao["PENDENTE"]
-evolucao["% OK"] = (evolucao["OK"] / evolucao["TOTAL"]) * 100
-evolucao["% PENDENTE"] = (evolucao["PENDENTE"] / evolucao["TOTAL"]) * 100
+contagem_coord = contagem_coord.reset_index()
+contagem_coord["COORDENADOR"] = contagem_coord["COORDENADOR"].fillna("Sem Coordenador")
 
-# === METRICAS ===
-ultimo_geral = evolucao.groupby("DATA_INSPECAO").sum().sort_index().iloc[-1]
-st.markdown("## Indicadores Gerais")
+# Cálculo total e percentual
+contagem_coord["TOTAL"] = contagem_coord["OK"] + contagem_coord["PENDENTE"]
+contagem_coord["% OK"] = (contagem_coord["OK"] / contagem_coord["TOTAL"]) * 100
+contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"] / contagem_coord["TOTAL"]) * 100
+
+# Cards resumo geral
+total_ok = contagem_coord["OK"].sum()
+total_pendente = contagem_coord["PENDENTE"].sum()
+total_geral = total_ok + total_pendente
+perc_ok = (total_ok / total_geral) * 100 if total_geral > 0 else 0
+perc_pendente = (total_pendente / total_geral) * 100 if total_geral > 0 else 0
+
 col1, col2 = st.columns(2)
-col1.metric("✅ % Técnicos 100% OK", f"{(ultimo_geral['OK'] / ultimo_geral['TOTAL'] * 100):.1f}%")
-col2.metric("⚠️ % Técnicos Pendentes", f"{(ultimo_geral['PENDENTE'] / ultimo_geral['TOTAL'] * 100):.1f}%")
+col1.metric("✅ Técnicos OK (total)", f"{total_ok} ({perc_ok:.1f}%)")
+col2.metric("⚠️ Técnicos Pendentes (total)", f"{total_pendente} ({perc_pendente:.1f}%)")
 
-# === GRÁFICO DE EVOLUÇÃO ===
-evolucao_long = evolucao.melt(
-    id_vars=["COORDENADOR", "DATA_INSPECAO"],
+# --- GRÁFICO COM % NAS BARRAS ---
+
+# Prepare dados para gráfico no formato longo (long format) para % OK e % PENDENTE
+df_grafico = contagem_coord.melt(
+    id_vars=["COORDENADOR"],
     value_vars=["% OK", "% PENDENTE"],
     var_name="STATUS",
     value_name="PERCENTUAL"
 )
 
-fig = px.line(
-    evolucao_long,
-    x="DATA_INSPECAO",
-    y="PERCENTUAL",
-    color="COORDENADOR",
-    line_dash="STATUS",
-    labels={"DATA_INSPECAO": "Data", "PERCENTUAL": "%", "COORDENADOR": "Coordenador"},
-    title="Evolução % de Técnicos OK e Pendentes por Coordenador"
-)
-fig.update_traces(mode="lines+markers")
-fig.update_layout(yaxis=dict(range=[0, 100]))
+# Ajustar nomes para legenda mais amigável
+df_grafico["STATUS"] = df_grafico["STATUS"].str.replace("% ", "").str.capitalize()
 
-# Colorir linhas
-for trace in fig.data:
-    if "OK" in trace.name:
-        trace.line.color = "green"
-    elif "PENDENTE" in trace.name:
-        trace.line.color = "red"
+fig = px.bar(
+    df_grafico,
+    x="COORDENADOR",
+    y="PERCENTUAL",
+    color="STATUS",
+    barmode="group",
+    text=df_grafico["PERCENTUAL"].apply(lambda x: f"{x:.1f}%"),
+    color_discrete_map={"Ok": "green", "Pendente": "red"},
+    labels={"COORDENADOR": "Coordenador", "PERCENTUAL": "Percentual (%)", "STATUS": "Status"},
+    title="Percentual de Técnicos OK e Pendentes por Coordenador"
+)
+
+fig.update_traces(textposition='outside')
+fig.update_layout(yaxis=dict(range=[0, 110]), uniformtext_minsize=8, uniformtext_mode='hide')
 
 st.plotly_chart(fig, use_container_width=True)
 
-# === TABELA DE PENDENTES ===
-df_pendentes = df_filt[df_filt["STATUS"] == "PENDENTE"]
-st.markdown("## 📋 Técnicos Pendentes")
-st.dataframe(df_pendentes, use_container_width=True)
+# Tabela só dos técnicos pendentes (filtrada)
+df_pendentes = df_filtrado[df_filtrado["STATUS"] == "PENDENTE"]
 
-# Função exportar Excel
+st.markdown("### Técnicos Pendentes")
+st.dataframe(df_pendentes[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE", "STATUS"]])
+
+# Função pra exportar df para Excel
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -124,33 +124,10 @@ def to_excel(df):
     output.seek(0)
     return output
 
-# Botão de download com estilo piscante
-css = """
-<style>
-@keyframes piscar {
-  0%   {background-color: #ff0000; color: white;}
-  50%  {background-color: white; color: red; border: 1px solid red;}
-  100% {background-color: #ff0000; color: white;}
-}
-.blink {
-  animation: piscar 1s infinite;
-  padding: 0.5em 1em;
-  font-weight: bold;
-  border-radius: 5px;
-  display: inline-block;
-  text-align: center;
-  margin-bottom: 1em;
-}
-</style>
-"""
-st.markdown(css, unsafe_allow_html=True)
-
-col_top = st.columns(1)[0]
-with col_top:
-    st.markdown('<div class="blink">⬇️ Baixar Excel com Pendentes</div>', unsafe_allow_html=True)
-    st.download_button(
-        label="",
-        data=to_excel(df_pendentes),
-        file_name="tecnicos_pendentes.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+# Botão download da tabela pendentes
+st.download_button(
+    label="⬇️ Baixar Excel com Técnicos Pendentes",
+    data=to_excel(df_pendentes),
+    file_name="epi_tecnicos_pendentes.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
