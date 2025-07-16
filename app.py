@@ -4,16 +4,16 @@ import plotly.express as px
 from io import BytesIO
 
 st.set_page_config(page_title="Painel EPI", layout="wide")
-st.title("🦺 Painel de Inspeções EPI")
+st.title("🦺 Painel de Inspeções EPI - Status Técnico (100% OK ou Pendentes)")
 
 # Link RAW do seu arquivo no GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# Padroniza nomes das colunas
+# Normaliza nomes das colunas
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-# Padroniza STATUS_CHECK_LIST, transforma "CHECK LIST OK" em "OK"
+# Padroniza STATUS_CHECK_LIST para OK/PENDENTE
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
@@ -22,42 +22,44 @@ df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
 
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Última inspeção por técnico e produto
+# Todos técnicos e todos produtos possíveis (garante incluir técnicos sem inspeção em produtos)
+todos_tecnicos = df["TECNICO"].dropna().unique()
+todos_produtos = df["PRODUTO_SIMILAR"].dropna().unique()
+
+# Cria produto x técnico "completo" pra garantir todas combinações
+todos_pares = pd.MultiIndex.from_product([todos_tecnicos, todos_produtos], names=["TECNICO", "PRODUTO_SIMILAR"]).to_frame(index=False)
+
+# Junta com coordenador e gerente (puxa do df original, usando drop_duplicates para garantir relação)
+relacoes = df[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates(subset=["TECNICO"])
+todos_pares = pd.merge(todos_pares, relacoes, on="TECNICO", how="left")
+
+# Última inspeção por técnico + produto
 df_ult = (
     df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
     .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
+    [["TECNICO", "PRODUTO_SIMILAR", "STATUS"]]
 )
 
-# Lista completa técnico + produto + coordenador + gerente
-todos_pares = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[
-    ["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]
-]
+# Junta os status com o completo (garante que técnicos sem inspeção terão NaN)
+df_completo = pd.merge(todos_pares, df_ult, on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 
-# Junta último status, preenche com SEM_INSPECAO quem não tem inspeção
-df_completo = pd.merge(
-    todos_pares,
-    df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
-    on=["TECNICO", "PRODUTO_SIMILAR"],
-    how="left"
-)
+# Substitui NaN por SEM_INSPECAO
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# Classificação do técnico considerando todos os produtos
+# Função para classificar técnico: só OK se TODOS os status dele forem OK
 def classifica_tecnico(status_list):
-    status_set = set(status_list)
-    if status_set == {"OK"}:
+    if all(s == "OK" for s in status_list):
         return "OK"
-    elif "PENDENTE" in status_set or "SEM_INSPECAO" in status_set:
-        return "PENDENTE"
     else:
         return "PENDENTE"
 
-status_tecnicos = df_completo.groupby("TECNICO")["STATUS"].apply(list).reset_index()
-status_tecnicos["CLASSIFICACAO"] = status_tecnicos["STATUS"].apply(classifica_tecnico)
+# Agrupa por técnico, cria lista dos status
+status_por_tecnico = df_completo.groupby("TECNICO")["STATUS"].apply(list).reset_index()
+status_por_tecnico["CLASSIFICACAO"] = status_por_tecnico["STATUS"].apply(classifica_tecnico)
 
-# Junta coordenador e gerente para cada técnico
+# Junta coordenador e gerente pra cada técnico
 meta = df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates()
-df_final = pd.merge(status_tecnicos, meta, on="TECNICO", how="left")
+df_final = pd.merge(status_por_tecnico, meta, on="TECNICO", how="left")
 
 # --- FILTROS ---
 with st.sidebar:
@@ -106,7 +108,6 @@ for stts in ["OK", "PENDENTE"]:
 
 ranking["TOTAL"] = ranking[["OK", "PENDENTE"]].sum(axis=1)
 
-# Cálculo de % — divide cada status pelo total de técnicos daquele coordenador
 for stts in ["OK", "PENDENTE"]:
     ranking[stts] = (ranking[stts] / ranking["TOTAL"] * 100).round(1)
 
@@ -120,7 +121,7 @@ fig_bar = px.bar(
 fig_bar.update_traces(textposition="inside")
 st.plotly_chart(fig_bar, use_container_width=True)
 
-# Botão para baixar Excel
+# Download Excel
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
