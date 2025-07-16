@@ -43,12 +43,16 @@ df_class = pd.merge(agrupado[["TECNICO", "CLASSIFICACAO"]],
                     df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates(),
                     on="TECNICO", how="left")
 
+# Garante que todos os status estejam presentes
+todos_status = ["OK", "PENDENTE", "SEM_INSPECAO"]
+df_class["CLASSIFICACAO"] = pd.Categorical(df_class["CLASSIFICACAO"], categories=todos_status)
+
 # Filtros
 with st.sidebar:
     st.header("🔍 Filtros")
     gerente = st.selectbox("Filtrar por Gerente", ["Todos"] + sorted(df_class["GERENTE"].dropna().unique()))
     coordenador = st.selectbox("Filtrar por Coordenador", ["Todos"] + sorted(df_class["COORDENADOR"].dropna().unique()))
-    status_sel = st.multiselect("Status", ["OK", "PENDENTE", "SEM_INSPECAO"], default=["OK", "PENDENTE", "SEM_INSPECAO"])
+    status_sel = st.multiselect("Status", todos_status, default=todos_status)
 
 # Aplica filtros
 df_filt = df_class.copy()
@@ -74,7 +78,7 @@ col2.metric("⚠️ Técnicos com Pendência", pend, f"{pct_pend}%")
 col3.metric("❌ Sem Inspeção", sem, f"{pct_sem}%")
 
 # Gráfico pizza
-pizza = df_filt["CLASSIFICACAO"].value_counts().reset_index()
+pizza = df_filt["CLASSIFICACAO"].value_counts().reindex(todos_status, fill_value=0).reset_index()
 pizza.columns = ["STATUS", "QTD"]
 fig_pie = px.pie(pizza, names="STATUS", values="QTD",
                  color="STATUS",
@@ -86,12 +90,12 @@ st.plotly_chart(fig_pie, use_container_width=True)
 ranking = df_filt.groupby(["COORDENADOR", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
 
 # Garante que todas as colunas existam
-for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
+for col in todos_status:
     if col not in ranking.columns:
         ranking[col] = 0
 
-total_coord = ranking[["OK", "PENDENTE", "SEM_INSPECAO"]].sum(axis=1)
-for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
+total_coord = ranking[todos_status].sum(axis=1)
+for col in todos_status:
     ranking[col] = (ranking[col] / total_coord * 100).round(1)
 
 melted = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name="PERCENTUAL")
@@ -115,4 +119,4 @@ def gerar_excel(df):
     buffer.seek(0)
     return buffer
 
-st.download_button("⬇️ Baixar Excel", gerar_excel(df_filt), file_name="inspecoes_tecnicos.xlsx")
+st.download_button("⬇️ Baixar Excel", gerar_excel(df_filt), file_name
