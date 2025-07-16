@@ -4,6 +4,21 @@ import plotly.express as px
 from io import BytesIO
 
 st.set_page_config(page_title="Painel Técnico - EPI", layout="wide")
+# 🎨 Estilo customizado com fundo colorido
+st.markdown(
+    """
+    <style>
+    body {
+        background-color: #f0f2f6;
+    }
+    .stApp {
+        background-color: #f0f2f6;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # Título
 title = "📊 Painel de Inspeções Técnicas - EPI 🛠️"
