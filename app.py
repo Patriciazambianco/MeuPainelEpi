@@ -84,11 +84,16 @@ st.plotly_chart(fig_pie, use_container_width=True)
 
 # Gráfico por coordenador
 ranking = df_filt.groupby(["COORDENADOR", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
-total_coord = ranking[["OK", "PENDENTE", "SEM_INSPECAO"]].sum(axis=1)
+
+# Garante que todas as colunas existam
 for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
     if col not in ranking.columns:
         ranking[col] = 0
+
+total_coord = ranking[["OK", "PENDENTE", "SEM_INSPECAO"]].sum(axis=1)
+for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
     ranking[col] = (ranking[col] / total_coord * 100).round(1)
+
 melted = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name="PERCENTUAL")
 fig_rank = px.bar(
     melted,
