@@ -12,7 +12,7 @@ st.markdown("---")
 df = pd.read_excel("https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx")
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
-df["STATUS"] = df["STATUS_CHECK_LIST"].replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
+df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
 # Pega última inspeção por TECNICO + PRODUTO
@@ -25,11 +25,11 @@ todos_pares = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[["TECNIC
 # Junta com a última inspeção
 df_completo = pd.merge(
     todos_pares,
-    ultima_inspecao[["TECNICO", "PRODUTO_SIMILAR", "STATUS_CHECK_LIST"]],
+    ultima_inspecao[["TECNICO", "PRODUTO_SIMILAR", "_CHECK_LIST"]],
     on=["TECNICO", "PRODUTO_SIMILAR"],
     how="left"
 )
-df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
+df_completo["STATUS_CHECK_LIST"] = df_completo["STATUS_CHECK_LIST"].fillna("SEM_INSPECAO")
 
 # Classifica o técnico
 
