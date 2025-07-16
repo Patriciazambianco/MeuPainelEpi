@@ -3,35 +3,39 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-st.set_page_config(page_title="Painel EPI com Gráficos", layout="wide")
+st.set_page_config(page_title="Painel EPI - FINAL", layout="wide")
 
-# 1. Carrega o Excel do GitHub
+# 1. Carrega do GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# 2. Limpa e padroniza os nomes das colunas
+# 2. Limpa e padroniza colunas
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-# 3. Trata a coluna de STATUS
+# 3. Padroniza STATUS
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
 
-# 4. Converte data
+# 4. Converte DATA
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# 5. Garante a última inspeção por TECNICO + PRODUTO
+# 5. Última inspeção por técnico + produto
 df_ultimas = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
 df_ultimas = df_ultimas.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
-# 6. Garante que todos os técnicos/produtos apareçam
-df_base = df[["TECNICO", "PRODUTO_SIMILAR", "GERENTE", "COORDENADOR"]].drop_duplicates()
+# 6. Gera base completa (TODOS técnicos x produtos)
+tecnicos = df[["TECNICO", "GERENTE", "COORDENADOR"]].drop_duplicates()
+produtos = df["PRODUTO_SIMILAR"].dropna().unique()
+df_base = tecnicos.assign(key=1).merge(pd.DataFrame({"PRODUTO_SIMILAR": produtos, "key": 1}), on="key").drop("key", axis=1)
+
+# 7. Junta com as últimas inspeções
 df_final = pd.merge(df_base, df_ultimas[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
                     on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 
-# 7. Classificação final por técnico
+# 8. Classifica por técnico
 def classificar_status(statuses):
     if statuses.isna().all():
         return "SEM INSPECAO"
@@ -44,7 +48,7 @@ def classificar_status(statuses):
 df_status = df_final.groupby(["TECNICO", "GERENTE", "COORDENADOR"])["STATUS"] \
     .apply(classificar_status).reset_index(name="STATUS_RESUMO")
 
-# 8. Filtros interativos
+# 9. Filtros
 coordenadores = sorted(df_status["COORDENADOR"].dropna().unique())
 status_opcoes = sorted(df_status["STATUS_RESUMO"].unique())
 
@@ -58,7 +62,7 @@ if coord_filtro != "Todos":
 if status_filtro:
     df_filtrado = df_filtrado[df_filtrado["STATUS_RESUMO"].isin(status_filtro)]
 
-# 9. Indicadores
+# 10. Indicadores
 total = len(df_filtrado)
 ok = (df_filtrado["STATUS_RESUMO"] == "OK").sum()
 pend = (df_filtrado["STATUS_RESUMO"] == "PENDENTE").sum()
@@ -74,13 +78,13 @@ k1.metric("Técnicos OK", ok, f"{pct_ok}%")
 k2.metric("Pendentes", pend, f"{pct_pend}%")
 k3.metric("Sem Inspeção", sem, f"{pct_sem}%")
 
-# 10. Gráfico de pizza
+# 11. Gráfico de pizza
 contagem = df_filtrado["STATUS_RESUMO"].value_counts().reset_index()
 contagem.columns = ["STATUS", "QTD"]
 fig_pizza = px.pie(contagem, names="STATUS", values="QTD", title="Distribuição de Status")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
-# 11. Ranking por coordenador
+# 12. Ranking por Coordenador
 ranking = df_filtrado.groupby("COORDENADOR")["STATUS_RESUMO"].value_counts().unstack(fill_value=0).reset_index()
 for status in ["OK", "PENDENTE", "SEM INSPECAO"]:
     if status not in ranking.columns:
@@ -93,11 +97,11 @@ fig_ranking = px.bar(ranking,
                      barmode="group")
 st.plotly_chart(fig_ranking, use_container_width=True)
 
-# 12. Tabela detalhada
+# 13. Tabela detalhada
 st.markdown("### 📋 Tabela Detalhada")
 st.dataframe(df_filtrado)
 
-# 13. Botão para baixar Excel
+# 14. Download
 def gerar_excel(df):
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
