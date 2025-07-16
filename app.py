@@ -55,7 +55,6 @@ df_filtro = df_filtro[df_filtro["STATUS"].isin(status_opcao)]
 total = len(df_filtro)
 ok = (df_filtro["STATUS"] == "OK").sum()
 pend = (df_filtro["STATUS"] == "PENDENTE").sum()
-sem = (df_filtro["STATUS"] == "SEM_INSPECAO").sum()
 
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = round(pend / total * 100, 1) if total else 0
