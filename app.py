@@ -119,4 +119,4 @@ def gerar_excel(df):
     buffer.seek(0)
     return buffer
 
-st.download_button("⬇️ Baixar Excel", gerar_excel(df_filt), file_name
+st.download_button("⬇️ Baixar Excel", gerar_excel(df_filt), file_name="inspecoes_tecnicos.xlsx")
