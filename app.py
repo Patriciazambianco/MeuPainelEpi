@@ -154,7 +154,7 @@ if page == "Ranking por Produto":
     fig_prod = px.bar(melted_prod, x="PRODUTO_SIMILAR", y="PERCENTUAL", color="STATUS",
                       barmode="stack", text_auto=True,
                       title="Distribuição (%) por Produto",
-                      color_discrete_map={"OK": "green", "PENDENTE"})
+                      color_discrete_map={"OK": "green", "PENDENTE": "red"})
     fig_prod.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_prod, use_container_width=True)
 
