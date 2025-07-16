@@ -27,21 +27,25 @@ todos = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[["TECNICO", "P
 df_completo = pd.merge(todos, ultima[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]], on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# Agrupa por técnico para saber se está 100% OK ou não
+# Agrupa status por técnico e classifica
 def classificar_tecnico(status_list):
-    if all(s == "OK" for s in status_list):
-        return "OK"
-    elif any(s == "PENDENTE" for s in status_list):
-        return "PENDENTE"
-    else:
+    if not status_list or all(s == "SEM_INSPECAO" for s in status_list):
         return "SEM_INSPECAO"
+    elif all(s == "OK" for s in status_list):
+        return "OK"
+    else:
+        return "PENDENTE"
 
-agrupado = df_completo.groupby("TECNICO")["STATUS"].agg(list).reset_index()
-agrupado["CLASSIFICACAO"] = agrupado["STATUS"].apply(classificar_tecnico)
+status_por_tecnico = df_completo.groupby("TECNICO")["STATUS"].agg(lambda x: list(x)).reset_index()
+status_por_tecnico["CLASSIFICACAO"] = status_por_tecnico["STATUS"].apply(classificar_tecnico)
 
-df_class = pd.merge(agrupado[["TECNICO", "CLASSIFICACAO"]],
-                    df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates(),
-                    on="TECNICO", how="left")
+# Junta com os dados de coordenador e gerente
+df_class = pd.merge(
+    status_por_tecnico[["TECNICO", "CLASSIFICACAO"]],
+    df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates(),
+    on="TECNICO",
+    how="left"
+)
 
 # Garante que todos os status estejam presentes
 todos_status = ["OK", "PENDENTE", "SEM_INSPECAO"]
