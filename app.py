@@ -77,8 +77,8 @@ perc_ok = (total_ok / total_geral) * 100 if total_geral > 0 else 0
 perc_pendente = (total_pendente / total_geral) * 100 if total_geral > 0 else 0
 
 col1, col2 = st.columns(2)
-col1.metric("✅ Técnicos OK (total)", f"{total_ok} ({perc_ok:.1f}%)")
-col2.metric("⚠️ Técnicos Pendentes (total)", f"{total_pendente} ({perc_pendente:.1f}%)")
+col1.metric("✅ Inspeções OK (total)", f"{total_ok} ({perc_ok:.1f}%)")
+col2.metric("⚠️ Inspeções Pendentes (total)", f"{total_pendente} ({perc_pendente:.1f}%)")
 
 # --- GRÁFICO COM % NAS BARRAS ---
 
