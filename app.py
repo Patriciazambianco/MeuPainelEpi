@@ -5,60 +5,52 @@ from io import BytesIO
 
 st.set_page_config(page_title="Painel Técnico - EPI", layout="wide")
 
-# Título e subtítulo
-st.title("📊 Painel de Inspeções - EPI 🛠️")
+# Título
+title = "📊 Painel de Inspeções Técnicas - EPI 🛠️"
+st.title(title)
 st.markdown("---")
 
-# 1. Lê Excel do GitHub
+# Carregar Excel
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# 2. Padroniza colunas e status
+
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
-
-# 3. Datas
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# 4. Última inspeção por técnico
-df_ultimos = df.sort_values(["TECNICO", "DATA_INSPECAO"], ascending=[True, False])
-df_ultimos = df_ultimos.drop_duplicates(subset=["TECNICO"], keep="first")
+ultima = df.sort_values(["TECNICO", "DATA_INSPECAO"], ascending=[True, False])
+ultima = ultima.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
-# 5. Junta todos técnicos
-tecnicos = df[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates()
-df_completo = pd.merge(tecnicos, df_ultimos[["TECNICO", "STATUS"]], on="TECNICO", how="left")
+
+tecnicos = df[["TECNICO", "COORDENADOR", "GERENTE", "PRODUTO_SIMILAR"]].drop_duplicates()
+df_completo = pd.merge(tecnicos, ultima[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]], on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# 6. Filtros: Gerente > Coordenador > Status
-gerente_opcoes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
-gerente = st.selectbox("🔹 Filtrar por Gerente", gerente_opcoes)
 
-df_filtro = df_completo.copy()
+gerentes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
+gerente = st.selectbox("👤 Filtrar por Gerente", gerentes)
+
+filtrado = df_completo.copy()
 if gerente != "Todos":
-    df_filtro = df_filtro[df_filtro["GERENTE"] == gerente]
+    filtrado = filtrado[filtrado["GERENTE"] == gerente]
 
-coord_opcoes = ["Todos"] + sorted(df_filtro["COORDENADOR"].dropna().unique())
-coordenador = st.selectbox("🔸 Filtrar por Coordenador", coord_opcoes)
-
+coords = ["Todos"] + sorted(filtrado["COORDENADOR"].dropna().unique())
+coordenador = st.selectbox("👥 Filtrar por Coordenador", coords)
 if coordenador != "Todos":
-    df_filtro = df_filtro[df_filtro["COORDENADOR"] == coordenador]
+    filtrado = filtrado[filtrado["COORDENADOR"] == coordenador]
 
-status_opcao = st.multiselect(
-    "🎯 Filtrar por Status",
-    options=["OK", "PENDENTE"],
-    default=["OK", "PENDENTE"]
-)
+status = st.multiselect("📌 Filtrar por Status", ["OK", "PENDENTE", "SEM_INSPECAO"], default=["OK", "PENDENTE"])
+filtrado = filtrado[filtrado["STATUS"].isin(status)]
 
-df_filtro = df_filtro[df_filtro["STATUS"].isin(status_opcao)]
-
-# 7. Indicadores
-total = len(df_filtro)
-ok = (df_filtro["STATUS"] == "OK").sum()
-pend = (df_filtro["STATUS"] == "PENDENTE").sum()
+# Indicadores
+total = len(filtrado)
+ok = (filtrado["STATUS"] == "OK").sum()
+pend = (filtrado["STATUS"] == "PENDENTE").sum()
 
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = round(pend / total * 100, 1) if total else 0
@@ -67,102 +59,82 @@ col1, col2, col3 = st.columns(3)
 col1.metric("✔️ Técnicos OK", ok, f"{pct_ok}%")
 col2.metric("⚠️ Pendentes", pend, f"{pct_pend}%")
 
-# 8. Pizza
-pizza = df_filtro["STATUS"].value_counts().reset_index()
-pizza.columns = ["STATUS", "QTD"]
-fig_pie = px.pie(
-    pizza,
-    names="STATUS",
-    values="QTD",
-    title="Distribuição de Técnicos",
-    color="STATUS",
-    color_discrete_map={
-        "OK": "green",
-        "PENDENTE": "red",
-        }
-)
 
+pizza = filtrado["STATUS"].value_counts().reset_index()
+pizza.columns = ["STATUS", "QTD"]
+fig_pie = px.pie(pizza, names="STATUS", values="QTD", title="Distribuição Geral",
+                 color="STATUS",
+                 color_discrete_map={"OK": "green", "PENDENTE": "red"})
 st.plotly_chart(fig_pie, use_container_width=True)
 
-# 9. Toggle modo percentual x absoluto
-modo_percentual = st.toggle("🔁 Ver gráfico por percentual (%)", value=True)
+# Toggle
+modo_percentual = st.toggle("📊 Mostrar gráfico como percentual", value=True)
 
-# Para gráfico de coordenadores vamos usar o df_completo filtrado por gerente,
-# para refletir o filtro geral, então filtramos o df_completo aqui também
-df_grafico = df_completo.copy()
+
+group = df_completo.copy()
 if gerente != "Todos":
-    df_grafico = df_grafico[df_grafico["GERENTE"] == gerente]
+    group = group[group["GERENTE"] == gerente]
 if coordenador != "Todos":
-    df_grafico = df_grafico[df_grafico["COORDENADOR"] == coordenador]
+    group = group[group["COORDENADOR"] == coordenador]
+
+grouped = group.groupby("COORDENADOR")["STATUS"].value_counts().unstack(fill_value=0)
+for col in ["OK", "PENDENTE"]:
+    if col not in grouped.columns:
+        grouped[col] = 0
+ranking = grouped.reset_index()
 
 if modo_percentual:
-    ranking = (
-        df_grafico
-        .groupby("COORDENADOR")["STATUS"]
-        .value_counts(normalize=True)
-        .unstack(fill_value=0)
-        .reset_index()
-    )
+    total_coord = ranking[["OK", "PENDENTE"]].sum(axis=1)
     for col in ["OK", "PENDENTE"]:
-        if col not in ranking.columns:
-            ranking[col] = 0
-    ranking[["OK", "PENDENTE"]] *= 100
-
-    fig_rank = px.bar(
-        ranking,
-        x="COORDENADOR",
-        y=["OK", "PENDENTE"],
-        barmode="stack",
-        title="Distribuição (%) por Coordenador",
-        labels={"value": "%", "variable": "Status"},
-        height=400,
-        text_auto=".1f"
-        }
-    fig_rank.update_layout(yaxis_title="%")
+        ranking[col] = (ranking[col] / total_coord * 100).round(1)
+    melted = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name="PERCENTUAL")
+    fig_rank = px.bar(melted, x="COORDENADOR", y="PERCENTUAL", color="STATUS",
+                      barmode="stack", text_auto=True,
+                      title="Distribuição (%) por Coordenador",
+                      color_discrete_map={"OK": "green", "PENDENTE": "red"})
 else:
-    ranking = (
-        df_grafico
-        .groupby("COORDENADOR")["STATUS"]
-        .value_counts()
-        .unstack(fill_value=0)
-        .reset_index()
-    )
-    for col in ["OK", "PENDENTE"]:
-        if col not in ranking.columns:
-            ranking[col] = 0
-
-    fig_rank = px.bar(
-        ranking,
-        x="COORDENADOR",
-        y=["OK", "PENDENTE"],
-        barmode="group",
-        title="Total de Técnicos por Coordenador",
-        labels={"value": "Qtd", "variable": "Status"},
-        height=400,
-        text_auto=True
-        color_discrete_map={
-        "OK": "green",
-        "PENDENTE": "red"
-    )
-    fig_rank.update_layout(yaxis_title="Qtd")
-
+    melted = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name="QTD")
+    fig_rank = px.bar(melted, x="COORDENADOR", y="QTD", color="STATUS",
+                      barmode="group", text_auto=True,
+                      title="Total por Coordenador",
+                      color_discrete_map={"OK": "green", "PENDENTE": "red"})
 st.plotly_chart(fig_rank, use_container_width=True)
 
-# 10. Tabela
-st.markdown("### 📋 Técnicos filtrados")
-st.dataframe(df_filtro)
+# Gráfico Produto
+grouped_prod = group.groupby("PRODUTO_SIMILAR")["STATUS"].value_counts().unstack(fill_value=0)
+for col in ["OK", "PENDENTE"]:
+    if col not in grouped_prod.columns:
+        grouped_prod[col] = 0
+ranking_prod = grouped_prod.reset_index()
 
-# 11. Download
+if modo_percentual:
+    total_prod = ranking_prod[["OK", "PENDENTE"]].sum(axis=1)
+    for col in ["OK", "PENDENTE"]:
+        ranking_prod[col] = (ranking_prod[col] / total_prod * 100).round(1)
+    melted_prod = ranking_prod.melt(id_vars="PRODUTO_SIMILAR", var_name="STATUS", value_name="PERCENTUAL")
+    fig_prod = px.bar(melted_prod, x="PRODUTO_SIMILAR", y="PERCENTUAL", color="STATUS",
+                      barmode="stack", text_auto=True,
+                      title="Distribuição (%) por Produto",
+                      color_discrete_map={"OK": "green", "PENDENTE": "red"})
+else:
+    melted_prod = ranking_prod.melt(id_vars="PRODUTO_SIMILAR", var_name="STATUS", value_name="QTD")
+    fig_prod = px.bar(melted_prod, x="PRODUTO_SIMILAR", y="QTD", color="STATUS",
+                      barmode="group", text_auto=True,
+                      title="Total por Produto",
+                      color_discrete_map={"OK": "green", "PENDENTE": "red"})
+fig_prod.update_layout(xaxis_tickangle=-45)
+st.plotly_chart(fig_prod, use_container_width=True)
+
+# Tabela e download
+st.markdown("### 📋 Técnicos Filtrados")
+st.dataframe(filtrado)
+
 def gerar_excel(df):
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Painel Técnicos")
+        df.to_excel(writer, index=False, sheet_name="Dados Filtrados")
     buffer.seek(0)
     return buffer
 
-st.download_button(
-    label="⬇️ Baixar Excel",
-    data=gerar_excel(df_filtro),
-    file_name="painel_tecnicos_status.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+st.download_button("⬇️ Baixar Excel Filtrado", data=gerar_excel(filtrado),
+                   file_name="painel_epi_filtrado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
