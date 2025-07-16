@@ -6,7 +6,7 @@ from io import BytesIO
 st.set_page_config(page_title="Painel Técnico - EPI", layout="wide")
 
 # Título e subtítulo
-st.title("📊 Painel de Inspeções Técnicas - EPI 🛠️")
+st.title("📊 Painel de Inspeções - EPI 🛠️")
 st.markdown("### Monitoramento por Gerente e Coordenador - Status OK, Pendentes e Sem Inspeção")
 st.markdown("---")
 
