@@ -42,18 +42,14 @@ df_completo = pd.merge(
 )
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# Aqui converte SEM_INSPECAO em PENDENTE para considerar técnicos sem inspeção como pendentes
-df_completo["STATUS"] = df_completo["STATUS"].replace({"SEM_INSPECAO": "PENDENTE"})
-
 # Classificação do técnico considerando todos os produtos
 def classifica_tecnico(status_list):
     status_set = set(status_list)
     if status_set == {"OK"}:
         return "OK"
-    elif "PENDENTE" in status_set:
+    elif "PENDENTE" in status_set or "SEM_INSPECAO" in status_set:
         return "PENDENTE"
     else:
-        # No nosso cenário, não deve haver outro status, mas por segurança:
         return "PENDENTE"
 
 status_tecnicos = df_completo.groupby("TECNICO")["STATUS"].apply(list).reset_index()
