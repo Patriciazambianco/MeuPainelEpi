@@ -10,32 +10,30 @@ st.title("🦺 Painel de Inspeções EPI")
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# Ajusta colunas para facilitar
+# Padroniza nomes das colunas
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-# Padroniza status para facilitar
+# Padroniza STATUS_CHECK_LIST, transforma "CHECK LIST OK" em "OK"
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
-
-# Corrige nomes: transformar "CHECK LIST OK" em "OK"
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
 
-df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors='coerce')
+df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Pega a última inspeção por técnico + produto (ordena e remove duplicados mantendo a última)
+# Última inspeção por técnico e produto
 df_ult = (
     df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
     .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 )
 
-# Garantir todos pares técnico + produto (sem duplicar) com coordenador e gerente
+# Lista completa técnico + produto + coordenador + gerente
 todos_pares = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[
     ["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]
 ]
 
-# Junta tudo para ter último status ou "SEM_INSPECAO" se não houver
+# Junta último status, preenche com SEM_INSPECAO quem não tem inspeção
 df_completo = pd.merge(
     todos_pares,
     df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
@@ -44,24 +42,26 @@ df_completo = pd.merge(
 )
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# Classificação por técnico:
-def classifica_tecnico(lista_status):
-    s = set(lista_status)
-    if s == {"OK"}:
+# Aqui converte SEM_INSPECAO em PENDENTE para considerar técnicos sem inspeção como pendentes
+df_completo["STATUS"] = df_completo["STATUS"].replace({"SEM_INSPECAO": "PENDENTE"})
+
+# Classificação do técnico considerando todos os produtos
+def classifica_tecnico(status_list):
+    status_set = set(status_list)
+    if status_set == {"OK"}:
         return "OK"
-    elif "PENDENTE" in s:
+    elif "PENDENTE" in status_set:
         return "PENDENTE"
-    elif s == {"SEM_INSPECAO"}:
-        return "SEM_INSPECAO"
     else:
-        return "PENDENTE"  # qualquer misto que não seja só OK
+        # No nosso cenário, não deve haver outro status, mas por segurança:
+        return "PENDENTE"
 
-status_tec = df_completo.groupby("TECNICO")["STATUS"].agg(list).reset_index()
-status_tec["CLASSIFICACAO"] = status_tec["STATUS"].apply(classifica_tecnico)
+status_tecnicos = df_completo.groupby("TECNICO")["STATUS"].apply(list).reset_index()
+status_tecnicos["CLASSIFICACAO"] = status_tecnicos["STATUS"].apply(classifica_tecnico)
 
-# Junta coordenador e gerente
+# Junta coordenador e gerente para cada técnico
 meta = df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates()
-df_final = pd.merge(status_tec, meta, on="TECNICO", how="left")
+df_final = pd.merge(status_tecnicos, meta, on="TECNICO", how="left")
 
 # --- FILTROS ---
 with st.sidebar:
@@ -70,7 +70,7 @@ with st.sidebar:
     coordenadores = ["Todos"] + sorted(df_final["COORDENADOR"].dropna().unique())
     gerente_sel = st.selectbox("Gerente", gerentes)
     coordenador_sel = st.selectbox("Coordenador", coordenadores)
-    status_sel = st.multiselect("Status", ["OK", "PENDENTE", "SEM_INSPECAO"], default=["OK", "PENDENTE", "SEM_INSPECAO"])
+    status_sel = st.multiselect("Status", ["OK", "PENDENTE"], default=["OK", "PENDENTE"])
 
 df_filtrado = df_final.copy()
 if gerente_sel != "Todos":
@@ -83,23 +83,20 @@ df_filtrado = df_filtrado[df_filtrado["CLASSIFICACAO"].isin(status_sel)]
 total = len(df_filtrado)
 ok = (df_filtrado["CLASSIFICACAO"] == "OK").sum()
 pend = (df_filtrado["CLASSIFICACAO"] == "PENDENTE").sum()
-sem = (df_filtrado["CLASSIFICACAO"] == "SEM_INSPECAO").sum()
 
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = round(pend / total * 100, 1) if total else 0
-pct_sem = round(sem / total * 100, 1) if total else 0
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 col1.metric("✅ Técnicos 100% OK", ok, f"{pct_ok}%")
-col2.metric("⚠️ Técnicos com Pendências", pend, f"{pct_pend}%")
-col3.metric("❌ Técnicos sem Inspeção", sem, f"{pct_sem}%")
+col2.metric("⚠️ Técnicos com Pendências (incluindo sem inspeção)", pend, f"{pct_pend}%")
 
 # Gráfico pizza
-pizza_df = df_filtrado["CLASSIFICACAO"].value_counts().reindex(["OK", "PENDENTE", "SEM_INSPECAO"], fill_value=0).reset_index()
+pizza_df = df_filtrado["CLASSIFICACAO"].value_counts().reindex(["OK", "PENDENTE"], fill_value=0).reset_index()
 pizza_df.columns = ["STATUS", "QTD"]
 fig_pie = px.pie(
     pizza_df, names="STATUS", values="QTD", color="STATUS",
-    color_discrete_map={"OK": "green", "PENDENTE": "red", "SEM_INSPECAO": "gray"},
+    color_discrete_map={"OK": "green", "PENDENTE": "red"},
     title="Distribuição dos Técnicos"
 )
 st.plotly_chart(fig_pie, use_container_width=True)
@@ -107,15 +104,14 @@ st.plotly_chart(fig_pie, use_container_width=True)
 # Ranking por coordenador (% técnicos)
 ranking = df_filtrado.groupby(["COORDENADOR", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
 
-# Garantir colunas presentes
-for stts in ["OK", "PENDENTE", "SEM_INSPECAO"]:
+for stts in ["OK", "PENDENTE"]:
     if stts not in ranking.columns:
         ranking[stts] = 0
 
-ranking["TOTAL"] = ranking[["OK", "PENDENTE", "SEM_INSPECAO"]].sum(axis=1)
+ranking["TOTAL"] = ranking[["OK", "PENDENTE"]].sum(axis=1)
 
 # Cálculo de % — divide cada status pelo total de técnicos daquele coordenador
-for stts in ["OK", "PENDENTE", "SEM_INSPECAO"]:
+for stts in ["OK", "PENDENTE"]:
     ranking[stts] = (ranking[stts] / ranking["TOTAL"] * 100).round(1)
 
 ranking_melt = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name="PERCENTUAL")
@@ -123,7 +119,7 @@ ranking_melt = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name
 fig_bar = px.bar(
     ranking_melt, x="COORDENADOR", y="PERCENTUAL", color="STATUS", text="PERCENTUAL",
     barmode="stack", title="% Técnicos por Coordenador",
-    color_discrete_map={"OK": "green", "PENDENTE": "red", "SEM_INSPECAO": "gray"}
+    color_discrete_map={"OK": "green", "PENDENTE": "red"}
 )
 fig_bar.update_traces(textposition="inside")
 st.plotly_chart(fig_bar, use_container_width=True)
