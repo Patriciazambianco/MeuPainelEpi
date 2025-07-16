@@ -5,6 +5,11 @@ from io import BytesIO
 
 st.set_page_config(page_title="Painel Técnico - EPI", layout="wide")
 
+# Título e subtítulo
+st.title("📊 Painel de Inspeções Técnicas - EPI 🛠️")
+st.markdown("### Monitoramento por Gerente e Coordenador - Status OK, Pendentes e Sem Inspeção")
+st.markdown("---")
+
 # 1. Lê Excel do GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
@@ -55,15 +60,14 @@ df_filtro = df_filtro[df_filtro["STATUS"].isin(status_opcao)]
 total = len(df_filtro)
 ok = (df_filtro["STATUS"] == "OK").sum()
 pend = (df_filtro["STATUS"] == "PENDENTE").sum()
+sem = (df_filtro["STATUS"] == "SEM_INSPECAO").sum()
 
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = round(pend / total * 100, 1) if total else 0
-pct_sem = round(sem / total * 100, 1) if total else 0
 
 col1, col2, col3 = st.columns(3)
 col1.metric("✔️ Técnicos OK", ok, f"{pct_ok}%")
 col2.metric("⚠️ Pendentes", pend, f"{pct_pend}%")
-col3.metric("❌ Sem Inspeção", sem, f"{pct_sem}%")
 
 # 8. Pizza
 pizza = df_filtro["STATUS"].value_counts().reset_index()
@@ -121,7 +125,7 @@ else:
     fig_rank = px.bar(
         ranking,
         x="COORDENADOR",
-        y=["OK", "PENDENTE"],
+        y=["OK", "PENDENTE", "SEM_INSPECAO"],
         barmode="group",
         title="Total de Técnicos por Coordenador",
         labels={"value": "Qtd", "variable": "Status"},
