@@ -25,6 +25,10 @@ df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
 # Converter data inspeção para datetime, ignorando erros
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
+# Padronizar strings para evitar erro no filtro
+df["GERENTE"] = df["GERENTE"].astype(str).str.strip()
+df["COORDENADOR"] = df["COORDENADOR"].astype(str).str.strip()
+
 # Filtrar linhas com técnico, produto e data inspeção
 df_valid = df.dropna(subset=["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"])
 
@@ -42,6 +46,10 @@ if gerente_sel != "Todos":
 if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
+# Debug: mostra dados filtrados
+st.write("### Dados filtrados após seleção")
+st.dataframe(df_filtrado.head(10))
+
 # Obter última inspeção por técnico + produto
 df_ult = (
     df_filtrado.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
@@ -49,14 +57,11 @@ df_ult = (
               [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO"]]
 )
 
-# Classificação diária por técnico (considera se todos produtos do dia estão OK ou se algum pendente)
+# Classificação diária por técnico (OK se todos produtos OK no dia, senão PENDENTE)
 status_diario = df_ult.groupby(["TECNICO", "DATA_INSPECAO"])["STATUS"].apply(list).reset_index()
 
 def classifica_dia(status_list):
-    if all(s == "OK" for s in status_list):
-        return "OK"
-    else:
-        return "PENDENTE"
+    return "OK" if all(s == "OK" for s in status_list) else "PENDENTE"
 
 status_diario["CLASSIFICACAO"] = status_diario["STATUS"].apply(classifica_dia)
 
@@ -69,11 +74,18 @@ evolucao["% OK"] = (evolucao.get("OK", 0) / evolucao["TOTAL"]) * 100
 evolucao["% PENDENTE"] = (evolucao.get("PENDENTE", 0) / evolucao["TOTAL"]) * 100
 evolucao = evolucao.reset_index()
 
-# Mostrar cards com os valores mais recentes
-ultimo = evolucao.iloc[-1]
-col1, col2 = st.columns(2)
-col1.metric("✅ Último % Técnicos 100% OK", f"{ultimo['% OK']:.1f}%")
-col2.metric("⚠️ Último % Técnicos Pendentes", f"{ultimo['% PENDENTE']:.1f}%")
+# Debug: mostra evolução
+st.write("### Evolução diária (últimos dias)")
+st.dataframe(evolucao.tail(10))
+
+# Mostrar cards com os valores mais recentes, se existirem dados
+if not evolucao.empty:
+    ultimo = evolucao.iloc[-1]
+    col1, col2 = st.columns(2)
+    col1.metric("✅ Último % Técnicos 100% OK", f"{ultimo['% OK']:.1f}%")
+    col2.metric("⚠️ Último % Técnicos Pendentes", f"{ultimo['% PENDENTE']:.1f}%")
+else:
+    st.warning("Sem dados suficientes para mostrar métricas.")
 
 # Plotar gráfico da evolução
 fig_evolucao = px.line(
