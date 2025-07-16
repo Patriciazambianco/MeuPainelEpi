@@ -6,37 +6,36 @@ from io import BytesIO
 st.set_page_config(page_title="Painel EPI", layout="wide")
 st.title("🦺 Painel de Inspeções EPI")
 
-# Link direto RAW para o Excel no GitHub
+# Link RAW do seu arquivo no GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-
-# Leitura e limpeza das colunas
 df = pd.read_excel(url)
+
+# Ajusta colunas para facilitar
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-# Normaliza o status
+# Padroniza status para facilitar
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 
-def map_status(x):
-    if "OK" in x:
-        return "OK"
-    elif "PENDENTE" in x:
-        return "PENDENTE"
-    else:
-        return None
+# Corrige nomes: transformar "CHECK LIST OK" em "OK"
+df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
+    "CHECK LIST OK": "OK",
+    "PENDENTE": "PENDENTE"
+})
 
-df["STATUS"] = df["STATUS_CHECK_LIST"].apply(map_status)
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors='coerce')
 
-# Pega a última inspeção por técnico + produto
+# Pega a última inspeção por técnico + produto (ordena e remove duplicados mantendo a última)
 df_ult = (
     df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
     .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 )
 
-# Garante todos os pares técnico + produto com coordenador e gerente
-todos_pares = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]]
+# Garantir todos pares técnico + produto (sem duplicar) com coordenador e gerente
+todos_pares = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[
+    ["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]
+]
 
-# Une com última inspeção, preenchendo faltantes com SEM_INSPECAO
+# Junta tudo para ter último status ou "SEM_INSPECAO" se não houver
 df_completo = pd.merge(
     todos_pares,
     df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
@@ -45,15 +44,17 @@ df_completo = pd.merge(
 )
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# Classifica cada técnico:
+# Classificação por técnico:
 def classifica_tecnico(lista_status):
     s = set(lista_status)
     if s == {"OK"}:
         return "OK"
+    elif "PENDENTE" in s:
+        return "PENDENTE"
     elif s == {"SEM_INSPECAO"}:
         return "SEM_INSPECAO"
     else:
-        return "PENDENTE"
+        return "PENDENTE"  # qualquer misto que não seja só OK
 
 status_tec = df_completo.groupby("TECNICO")["STATUS"].agg(list).reset_index()
 status_tec["CLASSIFICACAO"] = status_tec["STATUS"].apply(classifica_tecnico)
@@ -62,7 +63,7 @@ status_tec["CLASSIFICACAO"] = status_tec["STATUS"].apply(classifica_tecnico)
 meta = df_completo[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates()
 df_final = pd.merge(status_tec, meta, on="TECNICO", how="left")
 
-# --- Filtros ---
+# --- FILTROS ---
 with st.sidebar:
     st.header("Filtros")
     gerentes = ["Todos"] + sorted(df_final["GERENTE"].dropna().unique())
@@ -103,18 +104,22 @@ fig_pie = px.pie(
 )
 st.plotly_chart(fig_pie, use_container_width=True)
 
-# Ranking por coordenador (%)
+# Ranking por coordenador (% técnicos)
 ranking = df_filtrado.groupby(["COORDENADOR", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
 
+# Garantir colunas presentes
 for stts in ["OK", "PENDENTE", "SEM_INSPECAO"]:
     if stts not in ranking.columns:
         ranking[stts] = 0
 
 ranking["TOTAL"] = ranking[["OK", "PENDENTE", "SEM_INSPECAO"]].sum(axis=1)
+
+# Cálculo de % — divide cada status pelo total de técnicos daquele coordenador
 for stts in ["OK", "PENDENTE", "SEM_INSPECAO"]:
     ranking[stts] = (ranking[stts] / ranking["TOTAL"] * 100).round(1)
 
 ranking_melt = ranking.melt(id_vars="COORDENADOR", var_name="STATUS", value_name="PERCENTUAL")
+
 fig_bar = px.bar(
     ranking_melt, x="COORDENADOR", y="PERCENTUAL", color="STATUS", text="PERCENTUAL",
     barmode="stack", title="% Técnicos por Coordenador",
