@@ -3,123 +3,128 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-st.set_page_config(page_title="Painel EPI - Evolução por Coordenador", layout="wide")
-st.title("🦺 Evolução diária de Técnicos OK e Pendentes por Coordenador")
+st.set_page_config(page_title="Painel EPI - Evolução %", layout="wide")
+st.title("🦺 Painel de Inspeções EPI - Evolução de Técnicos OK e Pendentes")
 
-# URL do Excel no GitHub (raw)
+# URL raw do arquivo Excel no GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# Padronização colunas e dados
+# Padronizar nomes das colunas
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
+
+# Padronizar e mapear STATUS_CHECK_LIST
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
+
+# Converter data para datetime, ignorando erros
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Strip para evitar erros no filtro
-df["GERENTE"] = df["GERENTE"].astype(str).str.strip()
-df["COORDENADOR"] = df["COORDENADOR"].astype(str).str.strip()
+# Preencher tecnicos e produtos únicos para considerar sem inspeção (pendentes)
+tecnicos_produtos = df[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]].drop_duplicates()
 
-# Filtrar linhas válidas
-df_valid = df.dropna(subset=["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"])
+# Última inspeção por técnico + produto
+df_ult = (
+    df.dropna(subset=["DATA_INSPECAO"])
+      .sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
+      .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
+      [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR", "GERENTE"]]
+)
 
-# Sidebar filtros
+# Juntar tudo para incluir técnicos sem inspeção (sem linha em df_ult) com status 'PENDENTE'
+df_completo = pd.merge(tecnicos_produtos, df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO"]],
+                       on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
+
+df_completo["STATUS"] = df_completo["STATUS"].fillna("PENDENTE")
+df_completo["DATA_INSPECAO"] = pd.to_datetime(df_completo["DATA_INSPECAO"])
+
+# Filtros no sidebar
 st.sidebar.header("Filtros")
-gerentes = ["Todos"] + sorted(df_valid["GERENTE"].dropna().unique())
-coordenadores = ["Todos"] + sorted(df_valid["COORDENADOR"].dropna().unique())
+gerentes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
+coordenadores = ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique())
 gerente_sel = st.sidebar.selectbox("Gerente", gerentes)
 coordenador_sel = st.sidebar.selectbox("Coordenador", coordenadores)
 
-# Aplicar filtros
-df_filtrado = df_valid.copy()
+df_filtrado = df_completo.copy()
 if gerente_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_sel]
 if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
-# Última inspeção por técnico + produto
-df_ult = (
-    df_filtrado.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
-              .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
-              [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR"]]
-)
-
-# Classifica o dia por técnico: OK se TODOS produtos OK, senão Pendente
-status_diario = df_ult.groupby(["COORDENADOR", "TECNICO", "DATA_INSPECAO"])["STATUS"].apply(list).reset_index()
+# Classificar por técnico + dia (considerar se TODOS produtos do técnico no dia estão OK ou se algum pendente)
+status_diario = df_filtrado.groupby(["TECNICO", "DATA_INSPECAO"])["STATUS"].apply(list).reset_index()
 
 def classifica_dia(status_list):
-    return "OK" if all(s == "OK" for s in status_list) else "PENDENTE"
+    if all(s == "OK" for s in status_list):
+        return "OK"
+    else:
+        return "PENDENTE"
 
 status_diario["CLASSIFICACAO"] = status_diario["STATUS"].apply(classifica_dia)
 
-# Agora agrupamos por coordenador + data + status, contando técnicos
-evolucao = (
-    status_diario.groupby(["COORDENADOR", "DATA_INSPECAO", "CLASSIFICACAO"])
-    .size()
-    .unstack(fill_value=0)
-    .reset_index()
-)
+# Evolução: contar técnicos OK e Pendentes por coordenador e data
+evolucao = status_diario.groupby(["COORDENADOR", "DATA_INSPECAO", "CLASSIFICACAO"]).size().unstack(fill_value=0).reset_index()
+
+# Garantir colunas para OK e PENDENTE
+for col in ["OK", "PENDENTE"]:
+    if col not in evolucao.columns:
+        evolucao[col] = 0
 
 # Total técnicos por coordenador e data
-evolucao["TOTAL"] = evolucao.get("OK", 0) + evolucao.get("PENDENTE", 0)
+evolucao["TOTAL"] = evolucao["OK"] + evolucao["PENDENTE"]
 
-# Percentuais por coordenador e data
-evolucao["% OK"] = (evolucao.get("OK", 0) / evolucao["TOTAL"]) * 100
-evolucao["% PENDENTE"] = (evolucao.get("PENDENTE", 0) / evolucao["TOTAL"]) * 100
+# Calcular percentuais
+evolucao["% OK"] = (evolucao["OK"] / evolucao["TOTAL"]) * 100
+evolucao["% PENDENTE"] = (evolucao["PENDENTE"] / evolucao["TOTAL"]) * 100
 
-# Mostrar cards do último dia geral (considerando filtros)
-if not evolucao.empty:
-    ultimo_dia = evolucao["DATA_INSPECAO"].max()
-    ultimos = evolucao[evolucao["DATA_INSPECAO"] == ultimo_dia]
-    pct_ok_geral = (ultimos["OK"].sum() / ultimos["TOTAL"].sum()) * 100
-    pct_pendente_geral = (ultimos["PENDENTE"].sum() / ultimos["TOTAL"].sum()) * 100
-    c1, c2 = st.columns(2)
-    c1.metric("✅ Último % Técnicos 100% OK", f"{pct_ok_geral:.1f}%")
-    c2.metric("⚠️ Último % Técnicos Pendentes", f"{pct_pendente_geral:.1f}%")
-else:
-    st.warning("Sem dados para mostrar métricas.")
+# Mostrar cards com último percentual geral (filtrando antes)
+ultimo_geral = evolucao.groupby("DATA_INSPECAO").sum().sort_index().iloc[-1]
+col1, col2 = st.columns(2)
+col1.metric("✅ Último % Técnicos 100% OK", f"{(ultimo_geral['OK'] / ultimo_geral['TOTAL'] * 100):.1f}%")
+col2.metric("⚠️ Último % Técnicos Pendentes", f"{(ultimo_geral['PENDENTE'] / ultimo_geral['TOTAL'] * 100):.1f}%")
 
-# Filtro extra para coordenador no gráfico (se quiser só um coordenador)
-coordenadores_graf = evolucao["COORDENADOR"].unique().tolist()
-coord_graf_sel = st.sidebar.multiselect("Selecionar Coordenador(s) para o gráfico", coordenadores_graf, default=coordenadores_graf)
+# Preparar dados para gráfico (formato longo)
+evolucao_long = evolucao.melt(
+    id_vars=["COORDENADOR", "DATA_INSPECAO"],
+    value_vars=["% OK", "% PENDENTE"],
+    var_name="STATUS",
+    value_name="PERCENTUAL"
+)
 
-# Filtra para o gráfico
-evolucao_graf = evolucao[evolucao["COORDENADOR"].isin(coord_graf_sel)]
-
-# Plotar gráfico da evolução com percentual por coordenador
+# Gráfico de linha com cores e % nos pontos
 fig = px.line(
-    evolucao_graf,
+    evolucao_long,
     x="DATA_INSPECAO",
-    y=["% OK", "% PENDENTE"],
+    y="PERCENTUAL",
     color="COORDENADOR",
-    line_dash="CLASSIFICACAO",
+    line_dash="STATUS",
     labels={
         "DATA_INSPECAO": "Data",
-        "value": "Percentual (%)",
-        "variable": "Status",
+        "PERCENTUAL": "Percentual (%)",
+        "STATUS": "Status",
         "COORDENADOR": "Coordenador"
     },
     title="Evolução diária % Técnicos OK e Pendentes por Coordenador"
 )
-
 fig.update_traces(mode="lines+markers")
 fig.update_layout(yaxis=dict(range=[0, 100]), legend_title_text="Legenda")
-# Ajusta cores OK verde, PENDENTE vermelho
+
+# Colorir linhas OK de verde e Pendente de vermelho
 for trace in fig.data:
-    if "% OK" in trace.name:
+    if "OK" in trace.name:
         trace.line.color = "green"
-    elif "% PENDENTE" in trace.name:
+    elif "PENDENTE" in trace.name:
         trace.line.color = "red"
 
-# Adiciona os valores percentuais nos pontos
+# Mostrar valores %
 fig.update_traces(texttemplate='%{y:.1f}%', textposition='top center', textfont=dict(size=9))
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Função para exportar dataframe para Excel
+# Função para exportar df filtrado para Excel
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -127,7 +132,7 @@ def to_excel(df):
     output.seek(0)
     return output
 
-# Botão para download
+# Botão download
 st.download_button(
     label="⬇️ Baixar Excel com dados filtrados",
     data=to_excel(df_filtrado),
