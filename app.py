@@ -5,11 +5,11 @@ from io import BytesIO
 
 st.set_page_config(page_title="Painel Técnico - EPI", layout="wide")
 
-# 📥 1. Lê Excel do GitHub
+# 1. Lê Excel do GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# 🧼 2. Padroniza colunas e status
+# 2. Padroniza colunas e status
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
@@ -17,60 +17,58 @@ df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "PENDENTE": "PENDENTE"
 })
 
-# 🕒 3. Converte datas
+# 3. Datas
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# 📌 4. Última inspeção por técnico
+# 4. Última inspeção por técnico
 df_ultimos = df.sort_values(["TECNICO", "DATA_INSPECAO"], ascending=[True, False])
 df_ultimos = df_ultimos.drop_duplicates(subset=["TECNICO"], keep="first")
 
-# 📎 5. Junta com todos os técnicos
+# 5. Junta todos técnicos
 tecnicos = df[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates()
 df_completo = pd.merge(tecnicos, df_ultimos[["TECNICO", "STATUS"]], on="TECNICO", how="left")
-df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM INSPECAO")
+df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
-# 🎛️ 6. Filtros
-coord = st.selectbox("📌 Filtrar por Coordenador", ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique()))
+# 6. Filtros: coordenador e status
+coord_opcoes = ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique())
+coord = st.selectbox("📌 Filtrar por Coordenador", coord_opcoes)
+
 status_opcao = st.multiselect(
     "🎯 Filtrar por Status",
-    options=["OK", "PENDENTE", "SEM INSPECAO"],
-    default=["OK", "PENDENTE", "SEM INSPECAO"]
+    options=["OK", "PENDENTE", "SEM_INSPECAO"],
+    default=["OK", "PENDENTE", "SEM_INSPECAO"]
 )
 
 df_filtro = df_completo.copy()
 if coord != "Todos":
     df_filtro = df_filtro[df_filtro["COORDENADOR"] == coord]
-
 df_filtro = df_filtro[df_filtro["STATUS"].isin(status_opcao)]
 
-# 📊 7. Indicadores
+# 7. Indicadores
 total = len(df_filtro)
 ok = (df_filtro["STATUS"] == "OK").sum()
 pend = (df_filtro["STATUS"] == "PENDENTE").sum()
-sem = (df_filtro["STATUS"] == "SEM INSPECAO").sum()
+sem = (df_filtro["STATUS"] == "SEM_INSPECAO").sum()
 
 pct_ok = round(ok / total * 100, 1) if total else 0
 pct_pend = round(pend / total * 100, 1) if total else 0
 pct_sem = round(sem / total * 100, 1) if total else 0
 
-# 🧾 8. Métricas
-st.markdown("## 📈 Indicadores Gerais")
 col1, col2, col3 = st.columns(3)
 col1.metric("✔️ Técnicos OK", ok, f"{pct_ok}%")
 col2.metric("⚠️ Pendentes", pend, f"{pct_pend}%")
 col3.metric("❌ Sem Inspeção", sem, f"{pct_sem}%")
 
-# 🍕 9. Pizza
+# 8. Pizza
 pizza = df_filtro["STATUS"].value_counts().reset_index()
 pizza.columns = ["STATUS", "QTD"]
 fig_pie = px.pie(pizza, names="STATUS", values="QTD", title="Distribuição de Técnicos")
 st.plotly_chart(fig_pie, use_container_width=True)
 
-# 🔄 10. Alternador para gráfico percentual ou absoluto
+# 9. Toggle modo percentual x absoluto
 modo_percentual = st.toggle("🔁 Ver gráfico por percentual (%)", value=True)
 
 if modo_percentual:
-    # Percentual por coordenador
     ranking = (
         df_completo
         .groupby("COORDENADOR")["STATUS"]
@@ -78,23 +76,23 @@ if modo_percentual:
         .unstack(fill_value=0)
         .reset_index()
     )
-    for col in ["OK", "PENDENTE", "SEM INSPECAO"]:
+    for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
         if col not in ranking.columns:
             ranking[col] = 0
-    ranking[["OK", "PENDENTE", "SEM INSPECAO"]] *= 100
+    ranking[["OK", "PENDENTE", "SEM_INSPECAO"]] *= 100
 
     fig_rank = px.bar(
         ranking,
         x="COORDENADOR",
-        y=["OK", "PENDENTE", "SEM INSPECAO"],
+        y=["OK", "PENDENTE", "SEM_INSPECAO"],
         barmode="stack",
         title="Distribuição (%) por Coordenador",
         labels={"value": "%", "variable": "Status"},
-        height=400
+        height=400,
+        text_auto=".1f"
     )
     fig_rank.update_layout(yaxis_title="%")
 else:
-    # Absoluto por coordenador
     ranking = (
         df_completo
         .groupby("COORDENADOR")["STATUS"]
@@ -102,28 +100,29 @@ else:
         .unstack(fill_value=0)
         .reset_index()
     )
-    for col in ["OK", "PENDENTE", "SEM INSPECAO"]:
+    for col in ["OK", "PENDENTE", "SEM_INSPECAO"]:
         if col not in ranking.columns:
             ranking[col] = 0
 
     fig_rank = px.bar(
         ranking,
         x="COORDENADOR",
-        y=["OK", "PENDENTE", "SEM INSPECAO"],
+        y=["OK", "PENDENTE", "SEM_INSPECAO"],
         barmode="group",
         title="Total de Técnicos por Coordenador",
         labels={"value": "Qtd", "variable": "Status"},
-        height=400
+        height=400,
+        text_auto=True
     )
     fig_rank.update_layout(yaxis_title="Qtd")
 
 st.plotly_chart(fig_rank, use_container_width=True)
 
-# 📋 11. Tabela
+# 10. Tabela
 st.markdown("### 📋 Técnicos filtrados")
 st.dataframe(df_filtro)
 
-# 💾 12. Exportação
+# 11. Download
 def gerar_excel(df):
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
