@@ -6,27 +6,27 @@ from io import BytesIO
 st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
 st.title("🦺 CHECK LIST EPI")
 
-# URL raw do Excel no GitHub
+
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# Padronizar colunas
+
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-# Padronizar e mapear STATUS_CHECK_LIST
+
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
 
-# Converter data para datetime (ignorar erros)
+
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Preencher técnicos e produtos únicos para garantir inclusão de quem não tem inspeção
+
 tecnicos_produtos = df[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]].drop_duplicates()
 
-# Última inspeção por técnico + produto
+
 df_ult = (
     df.dropna(subset=["DATA_INSPECAO"])
       .sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
@@ -34,13 +34,13 @@ df_ult = (
       [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR", "GERENTE"]]
 )
 
-# Merge pra incluir técnicos sem inspeção com status PENDENTE
+
 df_completo = pd.merge(tecnicos_produtos, df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
                        on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 
 df_completo["STATUS"] = df_completo["STATUS"].fillna("PENDENTE")
 
-# Filtros sidebar: Gerente e Coordenador
+
 st.sidebar.header("Filtros")
 gerentes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
 coordenadores = ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique())
@@ -70,9 +70,6 @@ contagem_coord["% OK"] = (contagem_coord["OK"] / contagem_coord["TOTAL"]) * 100
 contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"] / contagem_coord["TOTAL"]) * 100
 
 # Cards resumo geral
-total_ok = contagem_coord["OK"].sum()
-total_pendente = contagem_coord["PENDENTE"].sum()
-total_geral = total_ok + total_pendente
 perc_ok = (total_ok / total_geral) * 100 if total_geral > 0 else 0
 perc_pendente = (total_pendente / total_geral) * 100 if total_geral > 0 else 0
 
@@ -80,7 +77,7 @@ col1, col2 = st.columns(2)
 col1.metric("✅ Técnicos OK (total)", f"{total_ok} ({perc_ok:.1f}%)")
 col2.metric("⚠️ Técnicos Pendentes (total)", f"{total_pendente} ({perc_pendente:.1f}%)")
 
-# --- GRÁFICO COM % NAS BARRAS ---
+
 
 # Prepare dados para gráfico no formato longo (long format) para % OK e % PENDENTE
 df_grafico = contagem_coord.melt(
