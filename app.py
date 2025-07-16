@@ -25,7 +25,7 @@ todos_pares = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"])[["TECNIC
 # Junta com a última inspeção
 df_completo = pd.merge(
     todos_pares,
-    ultima_inspecao[["TECNICO", "PRODUTO_SIMILAR", "_CHECK_LIST"]],
+    ultima_inspecao[["TECNICO", "PRODUTO_SIMILAR", "STATUS_CHECK_LIST"]],
     on=["TECNICO", "PRODUTO_SIMILAR"],
     how="left"
 )
