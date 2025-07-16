@@ -3,119 +3,103 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-st.set_page_config(page_title="Painel EPI - Evolução %", layout="wide")
-st.title("🦺 Painel de Inspeções EPI - Evolução Técnicos OK e Pendentes")
+st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
+st.title("🦺 Painel de Técnicos OK e Pendentes por Coordenador")
 
-# Link direto do Excel no GitHub (raw)
+# URL raw do Excel no GitHub
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = pd.read_excel(url)
 
-# Normaliza colunas
+# Padronizar colunas
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-# Normaliza status e cria coluna simplificada
+# Padronizar e mapear STATUS_CHECK_LIST
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip()
 df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
     "CHECK LIST OK": "OK",
     "PENDENTE": "PENDENTE"
 })
 
-# Data inspeção datetime
+# Converter data para datetime (ignorar erros)
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Pegando todos técnicos x produtos (pra incluir quem não tem inspeção, fica pendente)
-tec_prod = df[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]].drop_duplicates()
+# Preencher técnicos e produtos únicos (para incluir técnicos sem inspeção)
+tecnicos_produtos = df[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR"]].drop_duplicates()
 
-# Última inspeção por técnico + produto (ignora nulos)
+# Última inspeção por técnico + produto
 df_ult = (
     df.dropna(subset=["DATA_INSPECAO"])
       .sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
       .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
-      [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR", "GERENTE"]]
+      [["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO", "COORDENADOR"]]
 )
 
-# Junta tudo pra garantir técnico x produto sem inspeção aparecem como pendente
-df_completo = pd.merge(tec_prod, df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO"]],
+# Merge pra garantir técnicos sem inspeção apareçam como PENDENTE
+df_completo = pd.merge(tecnicos_produtos, df_ult[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
                        on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
+
 df_completo["STATUS"] = df_completo["STATUS"].fillna("PENDENTE")
 
-# Sidebar filtros
-st.sidebar.header("Filtros")
-gerentes = ["Todos"] + sorted(df_completo["GERENTE"].dropna().unique())
-coordenadores = ["Todos"] + sorted(df_completo["COORDENADOR"].dropna().unique())
-gerente_sel = st.sidebar.selectbox("Gerente", gerentes)
-coordenador_sel = st.sidebar.selectbox("Coordenador", coordenadores)
+# Contar técnicos OK e Pendentes por coordenador
+contagem_coord = df_completo.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0)
 
-# Aplica filtros
-df_filtrado = df_completo.copy()
-if gerente_sel != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_sel]
-if coordenador_sel != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
+# Garantir colunas OK e PENDENTE existam
+for col in ["OK", "PENDENTE"]:
+    if col not in contagem_coord.columns:
+        contagem_coord[col] = 0
 
-# Para calcular % OK e Pendentes, vamos considerar cada técnico como "OK" se TODOS os seus produtos estão OK
-# Agrupa por técnico, verifica status dos produtos
-status_por_tecnico = (
-    df_filtrado.groupby(["TECNICO", "COORDENADOR"])["STATUS"]
-    .apply(lambda x: "OK" if all(s == "OK" for s in x) else "PENDENTE")
-    .reset_index()
-)
+# Fill coordenador nulo com texto para não quebrar o gráfico
+contagem_coord = contagem_coord.reset_index()
+contagem_coord["COORDENADOR"] = contagem_coord["COORDENADOR"].fillna("Sem Coordenador")
 
-# Contagem por coordenador e status
-contagem_coord = status_por_tecnico.groupby(["COORDENADOR", "STATUS"]).size().unstack(fill_value=0)
-contagem_coord["TOTAL"] = contagem_coord.sum(axis=1)
+# DEBUG: Mostrar colunas e primeiras linhas para conferir
+st.write("Colunas após agrupamento e reset_index:", contagem_coord.columns.tolist())
+st.write(contagem_coord.head())
 
-# Percentuais
-contagem_coord["% OK"] = (contagem_coord.get("OK", 0) / contagem_coord["TOTAL"]) * 100
-contagem_coord["% PENDENTE"] = (contagem_coord.get("PENDENTE", 0) / contagem_coord["TOTAL"]) * 100
-
-# Cards com percentuais gerais (todos coordenadores juntos)
-total_geral = status_por_tecnico["STATUS"].value_counts()
-total_tecnicos = total_geral.sum()
-pct_ok = total_geral.get("OK", 0) / total_tecnicos * 100 if total_tecnicos > 0 else 0
-pct_pend = total_geral.get("PENDENTE", 0) / total_tecnicos * 100 if total_tecnicos > 0 else 0
-
-col1, col2 = st.columns(2)
-col1.metric("✅ % Técnicos OK (todos)", f"{pct_ok:.1f}%")
-col2.metric("⚠️ % Técnicos Pendentes (todos)", f"{pct_pend:.1f}%")
-
-# Gráfico ranking coordenadores
+# Gráfico de barras com OK e PENDENTE por coordenador
 fig = px.bar(
-    contagem_coord.reset_index(),
+    contagem_coord,
     x="COORDENADOR",
     y=["OK", "PENDENTE"],
-    title="Quantidade Técnicos OK e Pendentes por Coordenador",
+    title="Quantidade de Técnicos OK e Pendentes por Coordenador",
     labels={"value": "Quantidade de Técnicos", "COORDENADOR": "Coordenador", "variable": "Status"},
     color_discrete_map={"OK": "green", "PENDENTE": "red"},
     barmode="group"
 )
-
-# Gráfico de % por coordenador
-fig_pct = px.bar(
-    contagem_coord.reset_index(),
-    x="COORDENADOR",
-    y=["% OK", "% PENDENTE"],
-    title="Percentual de Técnicos OK e Pendentes por Coordenador",
-    labels={"value": "Percentual (%)", "COORDENADOR": "Coordenador", "variable": "Status"},
-    color_discrete_map={"% OK": "green", "% PENDENTE": "red"},
-    barmode="group",
-    range_y=[0, 100]
-)
-
 st.plotly_chart(fig, use_container_width=True)
-st.plotly_chart(fig_pct, use_container_width=True)
 
-# Função exportar Excel
+# Cálculo dos percentuais por coordenador
+contagem_coord["TOTAL"] = contagem_coord["OK"] + contagem_coord["PENDENTE"]
+contagem_coord["% OK"] = (contagem_coord["OK"] / contagem_coord["TOTAL"]) * 100
+contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"] / contagem_coord["TOTAL"]) * 100
+
+# Mostrar tabela resumida com percentuais
+st.write("Percentuais por Coordenador:")
+st.dataframe(contagem_coord[["COORDENADOR", "OK", "PENDENTE", "% OK", "% PENDENTE"]])
+
+# Cards com total geral
+total_ok = contagem_coord["OK"].sum()
+total_pendente = contagem_coord["PENDENTE"].sum()
+total_geral = total_ok + total_pendente
+perc_ok = (total_ok / total_geral) * 100 if total_geral > 0 else 0
+perc_pendente = (total_pendente / total_geral) * 100 if total_geral > 0 else 0
+
+col1, col2 = st.columns(2)
+col1.metric("✅ Técnicos OK (total)", f"{total_ok} ({perc_ok:.1f}%)")
+col2.metric("⚠️ Técnicos Pendentes (total)", f"{total_pendente} ({perc_pendente:.1f}%)")
+
+# Função pra exportar pra Excel
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Dados Filtrados")
+        df.to_excel(writer, index=False, sheet_name="Dados")
     output.seek(0)
     return output
 
+# Botão para download
 st.download_button(
-    label="⬇️ Baixar Excel com dados filtrados",
-    data=to_excel(df_filtrado),
-    file_name="epi_filtrado.xlsx",
+    label="⬇️ Baixar Excel com dados completos",
+    data=to_excel(df_completo),
+    file_name="epi_tecnicos_status.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
