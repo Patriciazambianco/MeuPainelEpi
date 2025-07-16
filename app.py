@@ -49,8 +49,8 @@ if coordenador != "Todos":
 
 status_opcao = st.multiselect(
     "🎯 Filtrar por Status",
-    options=["OK", "PENDENTE", "SEM_INSPECAO"],
-    default=["OK", "PENDENTE", "SEM_INSPECAO"]
+    options=["OK", "PENDENTE"],
+    default=["OK", "PENDENTE"]
 )
 
 df_filtro = df_filtro[df_filtro["STATUS"].isin(status_opcao)]
