@@ -57,7 +57,7 @@ df["STATUS"] = df["STATUS_CHECK_LIST"].replace({
 })
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
-# Última inspeção por técnico + produto
+# Última inspeção por técnico + produto, incluindo DATA_INSPECAO para filtro
 ultima = df.sort_values(["TECNICO", "DATA_INSPECAO"], ascending=[True, False])
 ultima = ultima.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
@@ -65,7 +65,12 @@ ultima = ultima.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="fir
 tecnicos = df.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="last")[
     ["TECNICO", "COORDENADOR", "GERENTE", "PRODUTO_SIMILAR"]
 ]
-df_completo = pd.merge(tecnicos, ultima[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]], on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
+df_completo = pd.merge(
+    tecnicos,
+    ultima[["TECNICO", "PRODUTO_SIMILAR", "STATUS", "DATA_INSPECAO"]],
+    on=["TECNICO", "PRODUTO_SIMILAR"],
+    how="left"
+)
 df_completo["STATUS"] = df_completo["STATUS"].fillna("SEM_INSPECAO")
 
 # --- Filtros ---
@@ -90,8 +95,8 @@ with st.sidebar.expander("Filtros"):
     df_filtrado = df_filtrado[df_filtrado["STATUS"].isin(status_selecionado)]
 
     # Filtro por data
-    min_date = df["DATA_INSPECAO"].min()
-    max_date = df["DATA_INSPECAO"].max()
+    min_date = df_completo["DATA_INSPECAO"].min()
+    max_date = df_completo["DATA_INSPECAO"].max()
     data_inicio, data_fim = st.date_input("📅 Filtrar por Data Inspeção", [min_date.date(), max_date.date()])
 
     df_filtrado = df_filtrado[
