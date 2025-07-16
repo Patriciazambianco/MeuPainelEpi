@@ -15,24 +15,26 @@ df["STATUS"] = df["STATUS"].replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENT
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
 # Pega a última inspeção por TECNICO + PRODUTO
-ultimas = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
-ultimas = ultimas.drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
+df_ultimas = df.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False]) \
+               .drop_duplicates(subset=["TECNICO", "PRODUTO_SIMILAR"], keep="first")
 
-base_tecnicos = df[["TECNICO", "PRODUTO_SIMILAR", "GERENTE", "COORDENADOR"]].drop_duplicates()
-df_final = pd.merge(base_tecnicos, ultimas[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]],
+# Base completa para garantir todos TECNICO + PRODUTO
+df_base = df[["TECNICO", "PRODUTO_SIMILAR", "GERENTE", "COORDENADOR"]].drop_duplicates()
+df_final = pd.merge(df_base, df_ultimas[["TECNICO", "PRODUTO_SIMILAR", "STATUS"]], 
                     on=["TECNICO", "PRODUTO_SIMILAR"], how="left")
 
-def classificar_status(grupo):
-    if grupo["STATUS"].isna().all():
+# Classifica status final por técnico
+def classificar_status(statuses):
+    if statuses.isna().all():
         return "SEM INSPECAO"
-    elif (grupo["STATUS"] == "PENDENTE").any():
+    if "PENDENTE" in statuses.values:
         return "PENDENTE"
-    elif (grupo["STATUS"] == "OK").any():
+    if "OK" in statuses.values:
         return "OK"
-    else:
-        return "SEM INSPECAO"
+    return "SEM INSPECAO"
 
-status_tecnicos = df_final.groupby(["TECNICO", "GERENTE", "COORDENADOR"]).apply(classificar_status).reset_index(name="STATUS_RESUMO")
+status_tecnicos = df_final.groupby(["TECNICO", "GERENTE", "COORDENADOR"])["STATUS"] \
+    .apply(classificar_status).reset_index(name="STATUS_RESUMO")
 
 # Filtros interativos
 coordenadores = sorted(status_tecnicos["COORDENADOR"].dropna().unique())
