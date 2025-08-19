@@ -23,13 +23,12 @@ df = carregar_dados()
 # =============================
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-# Verificar se colunas essenciais existem
 if "STATUS_CHECK_LIST" not in df.columns or "DATA_INSPECAO" not in df.columns:
     st.error("⚠️ A planilha precisa ter as colunas 'STATUS CHECK LIST' e 'DATA_INSPECAO'.")
     st.stop()
 
-# Forçar STATUS_CHECK_LIST como string
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.strip().str.upper()
+df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
 
 # =============================
 # Definir STATUS apenas OK ou PENDENTE
@@ -65,18 +64,33 @@ fig_pizza.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
 # =============================
-# Gráfico de Tendência
+# Gráfico de Tendência incluindo todos os técnicos
 # =============================
-# Considerando apenas registros com DATA_INSPECAO
-df_trend = df[df["DATA_INSPECAO"].notna()]
-df_trend_grouped = df_trend.groupby(["DATA_INSPECAO", "STATUS"]).size().reset_index(name="QTD")
+# Gerar série de datas do primeiro ao último registro
+min_data = df['DATA_INSPECAO'].min()
+max_data = df['DATA_INSPECAO'].max()
+if pd.isna(min_data):
+    min_data = pd.Timestamp.today()
+if pd.isna(max_data):
+    max_data = pd.Timestamp.today()
+datas = pd.date_range(start=min_data, end=max_data)
+
+# Agrupar por DATA_INSPECAO e STATUS
+df_trend = df.groupby(['DATA_INSPECAO', 'STATUS']).size().reset_index(name='QTD')
+
+# Criar todas as combinações de datas x status
+all_status = df['STATUS'].unique()
+df_full = pd.DataFrame([(d, s) for d in datas for s in all_status], columns=['DATA_INSPECAO', 'STATUS'])
+
+# Merge e preencher zeros
+df_trend_complete = pd.merge(df_full, df_trend, on=['DATA_INSPECAO', 'STATUS'], how='left').fillna(0)
 
 fig_trend = px.line(
-    df_trend_grouped,
-    x="DATA_INSPECAO",
-    y="QTD",
-    color="STATUS",
-    color_discrete_map={"OK": "green", "PENDENTE": "red"},
+    df_trend_complete,
+    x='DATA_INSPECAO',
+    y='QTD',
+    color='STATUS',
+    color_discrete_map={'OK': 'green', 'PENDENTE': 'red'},
     markers=True,
     title="📈 Tendência de Técnicos OK vs Pendentes"
 )
