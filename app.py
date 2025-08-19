@@ -33,7 +33,7 @@ if gerente_sel != "Todos":
 if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
-# --- Criar tabela completo técnico + produto ---
+# --- Criar tabela completa técnico + produto ---
 todos_tecnicos_prod = df_filtrado[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE"]].drop_duplicates()
 df_status_prod = pd.merge(
     todos_tecnicos_prod,
@@ -44,14 +44,16 @@ df_status_prod = pd.merge(
 df_status_prod["STATUS"] = df_status_prod["STATUS"].fillna("PENDENTE")
 
 # --- Agregação por técnico ---
-df_status_tecnico = (
-    df_status_prod.groupby(["TECNICO","COORDENADOR","GERENTE"])["STATUS"]
-    .apply(lambda x: "OK" if all(s=="OK" for s in x) else "PENDENTE")
-    .reset_index()
-)
+def status_tecnico(grupo):
+    if all(s=="OK" for s in grupo):
+        return "OK"
+    else:
+        return "PENDENTE"
+
+df_status_tecnico = df_status_prod.groupby(["TECNICO","COORDENADOR","GERENTE"])["STATUS"].apply(status_tecnico).reset_index()
 
 # -------------------------
-# Percentual por coordenador
+# Contagem e % por coordenador
 # -------------------------
 contagem_coord = df_status_tecnico.groupby(["COORDENADOR","STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 for col in ["OK","PENDENTE"]:
@@ -62,7 +64,7 @@ contagem_coord["% OK"] = (contagem_coord["OK"]/contagem_coord["TOTAL"]*100)
 contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"]/contagem_coord["TOTAL"]*100)
 
 # -------------------------
-# Percentual por gerente
+# Contagem e % por gerente
 # -------------------------
 contagem_ger = df_status_tecnico.groupby(["GERENTE","STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 for col in ["OK","PENDENTE"]:
