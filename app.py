@@ -3,12 +3,14 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-# Configuração inicial
+# =============================
+# Configuração da página
+# =============================
 st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
 st.title("🦺 INSPEÇÕES EPI")
 
 # =============================
-# Carregar dados
+# Carregar dados do GitHub
 # =============================
 @st.cache_data
 def carregar_dados():
@@ -19,7 +21,7 @@ def carregar_dados():
 df = carregar_dados()
 
 # =============================
-# Normalização
+# Normalizar colunas e status
 # =============================
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.strip().str.upper()
@@ -42,18 +44,26 @@ if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
 # =============================
-# Garantir único técnico (último status)
+# Criar tabela completa de técnicos
 # =============================
-df_ultimo = (
-    df_filtrado
-    .sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
-    .drop_duplicates(subset=["TECNICO"], keep="first")
+# Todos os técnicos
+todos_tecnicos = df_filtrado[["TECNICO", "COORDENADOR", "GERENTE"]].drop_duplicates()
+
+# Última inspeção por técnico (status)
+df_ult = (
+    df_filtrado.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
+    .drop_duplicates(subset=["TECNICO"], keep="first")[["TECNICO", "STATUS", "DATA_INSPECAO"]]
 )
+
+# Combinar todos os técnicos com a última inspeção
+df_completo = pd.merge(todos_tecnicos, df_ult, on="TECNICO", how="left")
+df_completo["STATUS"] = df_completo["STATUS"].fillna("PENDENTE")
+df_completo["DATA_INSPECAO"] = pd.to_datetime(df_completo["DATA_INSPECAO"])
 
 # =============================
 # Contagem por coordenador
 # =============================
-contagem_coord = df_ultimo.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+contagem_coord = df_completo.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 for col in ["OK", "PENDENTE"]:
     if col not in contagem_coord.columns:
         contagem_coord[col] = 0
@@ -62,7 +72,7 @@ contagem_coord["% OK"] = (contagem_coord["OK"] / contagem_coord["TOTAL"]) * 100
 contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"] / contagem_coord["TOTAL"]) * 100
 
 # =============================
-# Cards gerais
+# Cards de indicadores gerais
 # =============================
 total_ok = contagem_coord["OK"].sum()
 total_pendente = contagem_coord["PENDENTE"].sum()
@@ -75,7 +85,7 @@ col1.metric("✅ Técnicos OK", f"{total_ok} ({perc_ok:.1f}%)")
 col2.metric("⚠️ Técnicos Pendentes", f"{total_pendente} ({perc_pendente:.1f}%)")
 
 # =============================
-# Gráfico de Pizza
+# Gráfico de pizza
 # =============================
 fig_pizza = px.pie(
     names=["OK", "Pendentes"],
@@ -87,16 +97,12 @@ fig_pizza.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
 # =============================
-# Gráfico de Tendência por Coordenador (% diário)
+# Gráfico de tendência diário (% por coordenador)
 # =============================
-# Criar tabela diária com status por coordenador
-df_trend = df_filtrado.copy()
-df_trend = (
-    df_trend.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
-    .drop_duplicates(subset=["TECNICO"], keep="first")
-)
+df_trend = df_completo.copy()
 df_trend = df_trend[df_trend["DATA_INSPECAO"].notna()]
 
+# Contagem diária por coordenador e status
 df_pct = (
     df_trend.groupby(["COORDENADOR", "DATA_INSPECAO", "STATUS"])["TECNICO"]
     .nunique()
@@ -104,7 +110,6 @@ df_pct = (
     .reset_index()
 )
 
-# Garantir colunas OK e PENDENTE
 for col in ["OK", "PENDENTE"]:
     if col not in df_pct.columns:
         df_pct[col] = 0
@@ -132,7 +137,7 @@ st.plotly_chart(fig_trend, use_container_width=True)
 # =============================
 # Download de Pendentes
 # =============================
-df_pendentes = df_ultimo[df_ultimo["STATUS"] == "PENDENTE"]
+df_pendentes = df_completo[df_completo["STATUS"] == "PENDENTE"]
 
 def to_excel(df):
     output = BytesIO()
@@ -149,7 +154,7 @@ if not df_pendentes.empty:
     )
 
 # =============================
-# Tabelas
+# Tabelas de Percentual e Pendentes
 # =============================
 st.markdown("### 📊 Percentual de Técnicos por Coordenador")
 st.dataframe(contagem_coord[["COORDENADOR", "TOTAL", "OK", "PENDENTE", "% OK", "% PENDENTE"]])
