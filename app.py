@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from io import BytesIO
-from datetime import datetime, timedelta
 
 # Configuração inicial
 st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
@@ -32,26 +31,10 @@ if "STATUS_CHECK_LIST" not in df.columns or "DATA_INSPECAO" not in df.columns:
 # Forçar STATUS_CHECK_LIST como string
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.strip().str.upper()
 
-# Converter datas
-df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
-
 # =============================
-# Definir STATUS considerando últimos 180 dias
+# Definir STATUS apenas OK ou PENDENTE
 # =============================
-hoje = datetime.today()
-limite = hoje - timedelta(days=180)
-
-def definir_status(row):
-    if pd.isna(row["DATA_INSPECAO"]):
-        return "PENDENTE"
-    elif row["DATA_INSPECAO"] < limite:
-        return "PENDENTE"
-    elif row["STATUS_CHECK_LIST"] == "CHECK LIST OK":
-        return "OK"
-    else:
-        return "PENDENTE"
-
-df["STATUS"] = df.apply(definir_status, axis=1)
+df["STATUS"] = df["STATUS_CHECK_LIST"].apply(lambda x: "OK" if x == "CHECK LIST OK" else "PENDENTE")
 
 # =============================
 # Cards de indicadores
@@ -82,9 +65,10 @@ fig_pizza.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
 # =============================
-# Gráfico de Tendência últimos 180 dias
+# Gráfico de Tendência
 # =============================
-df_trend = df[df["DATA_INSPECAO"].notna() & (df["DATA_INSPECAO"] >= limite)]
+# Considerando apenas registros com DATA_INSPECAO
+df_trend = df[df["DATA_INSPECAO"].notna()]
 df_trend_grouped = df_trend.groupby(["DATA_INSPECAO", "STATUS"]).size().reset_index(name="QTD")
 
 fig_trend = px.line(
@@ -94,7 +78,7 @@ fig_trend = px.line(
     color="STATUS",
     color_discrete_map={"OK": "green", "PENDENTE": "red"},
     markers=True,
-    title="📈 Tendência de Técnicos OK vs Pendentes (Últimos 180 dias)"
+    title="📈 Tendência de Técnicos OK vs Pendentes"
 )
 st.plotly_chart(fig_trend, use_container_width=True)
 
