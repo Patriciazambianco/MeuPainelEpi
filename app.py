@@ -46,9 +46,18 @@ if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
 # =============================
-# Contagem por coordenador com percentuais
+# Garantir único técnico (último status)
 # =============================
-contagem_coord = df_filtrado.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+df_ultimo = (
+    df_filtrado
+    .sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
+    .drop_duplicates(subset=["TECNICO"], keep="first")
+)
+
+# =============================
+# Contagem por coordenador
+# =============================
+contagem_coord = df_ultimo.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 
 for col in ["OK", "PENDENTE"]:
     if col not in contagem_coord.columns:
@@ -85,16 +94,16 @@ fig_pizza.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
 # =============================
-# Gráfico de Tendência por STATUS
+# Gráfico de Tendência (opcional)
 # =============================
-df_trend = df_filtrado.groupby(["DATA_INSPECAO", "STATUS"]).size().reset_index(name="QTD")
+df_trend = df_filtrado.groupby(["DATA_INSPECAO", "STATUS"])["TECNICO"].nunique().reset_index()
 df_trend["DATA_INSPECAO"] = pd.to_datetime(df_trend["DATA_INSPECAO"])
 df_trend = df_trend[df_trend["DATA_INSPECAO"].notna()]
 
 fig_trend = px.line(
     df_trend,
     x="DATA_INSPECAO",
-    y="QTD",
+    y="TECNICO",
     color="STATUS",
     color_discrete_map={"OK": "green", "PENDENTE": "red"},
     markers=True,
@@ -105,7 +114,7 @@ st.plotly_chart(fig_trend, use_container_width=True)
 # =============================
 # Download de Pendentes
 # =============================
-df_pendentes = df_filtrado[df_filtrado["STATUS"] == "PENDENTE"]
+df_pendentes = df_ultimo[df_ultimo["STATUS"] == "PENDENTE"]
 
 def to_excel(df):
     output = BytesIO()
@@ -122,10 +131,13 @@ if not df_pendentes.empty:
     )
 
 # =============================
-# Tabela de Pendentes
+# Tabela de Percentual por Coordenador
 # =============================
-st.markdown("### 📋 Percentual de Técnicos por Coordenador")
+st.markdown("### 📊 Percentual de Técnicos por Coordenador")
 st.dataframe(contagem_coord[["COORDENADOR", "TOTAL", "OK", "PENDENTE", "% OK", "% PENDENTE"]])
 
+# =============================
+# Tabela de Pendentes
+# =============================
 st.markdown("### 📋 Técnicos Pendentes")
 st.dataframe(df_pendentes[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE", "DATA_INSPECAO", "STATUS"]])
