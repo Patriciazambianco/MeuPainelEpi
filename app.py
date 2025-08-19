@@ -11,9 +11,9 @@ df = pd.read_excel(url)
 
 # Normalizar colunas
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
-df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.strip().str.upper()
+df["PERSONALIZAR"] = df["PERSONALIZAR"].astype(str).str.strip().str.upper()
 
-# Filtrar por gerente e coordenador
+# Filtros
 st.sidebar.header("🎯 Filtros")
 gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
 coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
@@ -27,8 +27,8 @@ if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"]==coordenador_sel]
 
 # --- Cards gerais ---
-total_ok = (df_filtrado["STATUS_CHECK_LIST"]=="CHECK LIST OK").sum()
-total_pendente = (df_filtrado["STATUS_CHECK_LIST"]=="PENDENTE").sum()
+total_ok = (df_filtrado["PERSONALIZAR"]=="CHECK LIST OK").sum()
+total_pendente = (df_filtrado["PERSONALIZAR"]=="PENDENTE").sum()
 total_geral = total_ok + total_pendente
 perc_ok = total_ok/total_geral*100 if total_geral>0 else 0
 perc_pendente = total_pendente/total_geral*100 if total_geral>0 else 0
@@ -38,7 +38,7 @@ col1.metric("✅ Técnicos OK", f"{total_ok} ({perc_ok:.1f}%)")
 col2.metric("⚠️ Técnicos Pendentes", f"{total_pendente} ({perc_pendente:.1f}%)")
 
 # --- Gráfico por gerente ---
-contagem_ger = df_filtrado.groupby(["GERENTE","STATUS_CHECK_LIST"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+contagem_ger = df_filtrado.groupby(["GERENTE","PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 for col in ["CHECK LIST OK","PENDENTE"]:
     if col not in contagem_ger.columns:
         contagem_ger[col]=0
@@ -58,6 +58,6 @@ fig.update_layout(yaxis=dict(range=[0,110]), uniformtext_minsize=8, uniformtext_
 st.plotly_chart(fig,use_container_width=True)
 
 # --- Tabela pendentes ---
-df_pendentes = df_filtrado[df_filtrado["STATUS_CHECK_LIST"]=="PENDENTE"]
+df_pendentes = df_filtrado[df_filtrado["PERSONALIZAR"]=="PENDENTE"]
 st.markdown("### 📋 Técnicos Pendentes")
-st.dataframe(df_pendentes[["TECNICO","COORDENADOR","GERENTE","STATUS_CHECK_LIST"]])
+st.dataframe(df_pendentes[["TECNICO","COORDENADOR","GERENTE","PERSONALIZAR"]])
