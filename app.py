@@ -33,38 +33,47 @@ if gerente_sel != "Todos":
 if coordenador_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
 
+# --- Criar tabela completa técnico + produto ---
+todos_tecnicos_prod = df_filtrado[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE"]].drop_duplicates()
+df_status_prod = pd.merge(
+    todos_tecnicos_prod,
+    df_filtrado[["TECNICO","PRODUTO_SIMILAR","STATUS"]],
+    on=["TECNICO","PRODUTO_SIMILAR"],
+    how="left"
+)
+df_status_prod["STATUS"] = df_status_prod["STATUS"].fillna("PENDENTE")  # produtos sem inspeção são pendentes
+
 # --- Agregação por técnico ---
-# Um técnico é OK se todos os produtos dele estiverem OK
 df_status_tecnico = (
-    df_filtrado.groupby(["TECNICO", "COORDENADOR", "GERENTE"])["STATUS"]
+    df_status_prod.groupby(["TECNICO","COORDENADOR","GERENTE"])["STATUS"]
     .apply(lambda x: "OK" if all(s=="OK" for s in x) else "PENDENTE")
     .reset_index()
 )
 
 # Contagem por coordenador
-contagem_coord = df_status_tecnico.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
-for col in ["OK", "PENDENTE"]:
+contagem_coord = df_status_tecnico.groupby(["COORDENADOR","STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+for col in ["OK","PENDENTE"]:
     if col not in contagem_coord.columns:
-        contagem_coord[col] = 0
-contagem_coord["TOTAL"] = contagem_coord["OK"] + contagem_coord["PENDENTE"]
-contagem_coord["% OK"] = (contagem_coord["OK"] / contagem_coord["TOTAL"])*100
-contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"] / contagem_coord["TOTAL"])*100
+        contagem_coord[col]=0
+contagem_coord["TOTAL"]=contagem_coord["OK"]+contagem_coord["PENDENTE"]
+contagem_coord["% OK"] = (contagem_coord["OK"]/contagem_coord["TOTAL"]*100)
+contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"]/contagem_coord["TOTAL"]*100)
 
 # Cards
 total_ok = contagem_coord["OK"].sum()
 total_pendente = contagem_coord["PENDENTE"].sum()
 total_geral = total_ok + total_pendente
-perc_ok = (total_ok / total_geral * 100) if total_geral>0 else 0
-perc_pendente = (total_pendente / total_geral * 100) if total_geral>0 else 0
+perc_ok = (total_ok/total_geral*100) if total_geral>0 else 0
+perc_pendente = (total_pendente/total_geral*100) if total_geral>0 else 0
 
-col1, col2 = st.columns(2)
+col1,col2 = st.columns(2)
 col1.metric("✅ Técnicos OK", f"{total_ok} ({perc_ok:.1f}%)")
 col2.metric("⚠️ Técnicos Pendentes", f"{total_pendente} ({perc_pendente:.1f}%)")
 
 # Gráfico de barras por coordenador (%)
 df_bar = contagem_coord.melt(
     id_vars=["COORDENADOR"],
-    value_vars=["% OK", "% PENDENTE"],
+    value_vars=["% OK","% PENDENTE"],
     var_name="STATUS",
     value_name="PERCENTUAL"
 )
