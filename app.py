@@ -97,42 +97,29 @@ fig_pizza.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
 # =============================
-# Gráfico de tendência diário (% por coordenador)
+# Gráfico de barras agrupadas por coordenador (%)
 # =============================
-df_trend = df_completo.copy()
-df_trend = df_trend[df_trend["DATA_INSPECAO"].notna()]
-
-# Contagem diária por coordenador e status
-df_pct = (
-    df_trend.groupby(["COORDENADOR", "DATA_INSPECAO", "STATUS"])["TECNICO"]
-    .nunique()
-    .unstack(fill_value=0)
-    .reset_index()
+df_bar = contagem_coord.melt(
+    id_vars=["COORDENADOR"],
+    value_vars=["% OK", "% PENDENTE"],
+    var_name="STATUS",
+    value_name="PERCENTUAL"
 )
+df_bar["STATUS"] = df_bar["STATUS"].str.replace("% ", "").str.capitalize()
 
-for col in ["OK", "PENDENTE"]:
-    if col not in df_pct.columns:
-        df_pct[col] = 0
-
-df_pct["TOTAL"] = df_pct["OK"] + df_pct["PENDENTE"]
-df_pct["% OK"] = (df_pct["OK"] / df_pct["TOTAL"]) * 100
-df_pct["% PENDENTE"] = (df_pct["PENDENTE"] / df_pct["TOTAL"]) * 100
-
-# Transformar para long format para Plotly
-df_plot = df_pct.melt(id_vars=["COORDENADOR", "DATA_INSPECAO"], value_vars=["% OK", "% PENDENTE"],
-                      var_name="STATUS", value_name="PERCENTUAL")
-df_plot["STATUS"] = df_plot["STATUS"].str.replace("% ", "").str.capitalize()
-
-fig_trend = px.line(
-    df_plot,
-    x="DATA_INSPECAO",
+fig_bar = px.bar(
+    df_bar,
+    x="COORDENADOR",
     y="PERCENTUAL",
-    color="COORDENADOR",
-    line_dash="STATUS",
-    markers=True,
-    title="📈 Percentual diário de Técnicos OK vs Pendentes por Coordenador"
+    color="STATUS",
+    barmode="group",
+    text=df_bar["PERCENTUAL"].apply(lambda x: f"{x:.1f}%"),
+    color_discrete_map={"Ok": "green", "Pendente": "red"},
+    title="📊 Percentual de Técnicos OK vs Pendentes por Coordenador"
 )
-st.plotly_chart(fig_trend, use_container_width=True)
+fig_bar.update_traces(textposition='outside')
+fig_bar.update_layout(yaxis=dict(range=[0, 110]), uniformtext_minsize=8, uniformtext_mode='hide')
+st.plotly_chart(fig_bar, use_container_width=True)
 
 # =============================
 # Download de Pendentes
