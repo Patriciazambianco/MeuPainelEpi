@@ -8,7 +8,7 @@ st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wid
 st.title("🦺 INSPEÇÕES EPI")
 
 # =============================
-# Função para carregar os dados
+# Carregar dados
 # =============================
 @st.cache_data
 def carregar_dados():
@@ -19,15 +19,11 @@ def carregar_dados():
 df = carregar_dados()
 
 # =============================
-# Normalização de colunas e textos
+# Normalização
 # =============================
 df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 df["STATUS_CHECK_LIST"] = df["STATUS_CHECK_LIST"].astype(str).str.strip().str.upper()
 df["DATA_INSPECAO"] = pd.to_datetime(df["DATA_INSPECAO"], errors="coerce")
-
-# =============================
-# Definir STATUS apenas OK ou PENDENTE
-# =============================
 df["STATUS"] = df["STATUS_CHECK_LIST"].apply(lambda x: "OK" if x == "CHECK LIST OK" else "PENDENTE")
 
 # =============================
@@ -58,17 +54,15 @@ df_ultimo = (
 # Contagem por coordenador
 # =============================
 contagem_coord = df_ultimo.groupby(["COORDENADOR", "STATUS"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
-
 for col in ["OK", "PENDENTE"]:
     if col not in contagem_coord.columns:
         contagem_coord[col] = 0
-
 contagem_coord["TOTAL"] = contagem_coord["OK"] + contagem_coord["PENDENTE"]
 contagem_coord["% OK"] = (contagem_coord["OK"] / contagem_coord["TOTAL"]) * 100
 contagem_coord["% PENDENTE"] = (contagem_coord["PENDENTE"] / contagem_coord["TOTAL"]) * 100
 
 # =============================
-# Cards de indicadores gerais
+# Cards gerais
 # =============================
 total_ok = contagem_coord["OK"].sum()
 total_pendente = contagem_coord["PENDENTE"].sum()
@@ -86,7 +80,6 @@ col2.metric("⚠️ Técnicos Pendentes", f"{total_pendente} ({perc_pendente:.1f
 fig_pizza = px.pie(
     names=["OK", "Pendentes"],
     values=[total_ok, total_pendente],
-    color=["OK", "Pendentes"],
     color_discrete_map={"OK": "green", "Pendentes": "red"},
     hole=0.4
 )
@@ -94,20 +87,45 @@ fig_pizza.update_traces(textinfo="percent+label")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
 # =============================
-# Gráfico de Tendência (opcional)
+# Gráfico de Tendência por Coordenador (% diário)
 # =============================
-df_trend = df_filtrado.groupby(["DATA_INSPECAO", "STATUS"])["TECNICO"].nunique().reset_index()
-df_trend["DATA_INSPECAO"] = pd.to_datetime(df_trend["DATA_INSPECAO"])
+# Criar tabela diária com status por coordenador
+df_trend = df_filtrado.copy()
+df_trend = (
+    df_trend.sort_values(["TECNICO", "PRODUTO_SIMILAR", "DATA_INSPECAO"], ascending=[True, True, False])
+    .drop_duplicates(subset=["TECNICO"], keep="first")
+)
 df_trend = df_trend[df_trend["DATA_INSPECAO"].notna()]
 
+df_pct = (
+    df_trend.groupby(["COORDENADOR", "DATA_INSPECAO", "STATUS"])["TECNICO"]
+    .nunique()
+    .unstack(fill_value=0)
+    .reset_index()
+)
+
+# Garantir colunas OK e PENDENTE
+for col in ["OK", "PENDENTE"]:
+    if col not in df_pct.columns:
+        df_pct[col] = 0
+
+df_pct["TOTAL"] = df_pct["OK"] + df_pct["PENDENTE"]
+df_pct["% OK"] = (df_pct["OK"] / df_pct["TOTAL"]) * 100
+df_pct["% PENDENTE"] = (df_pct["PENDENTE"] / df_pct["TOTAL"]) * 100
+
+# Transformar para long format para Plotly
+df_plot = df_pct.melt(id_vars=["COORDENADOR", "DATA_INSPECAO"], value_vars=["% OK", "% PENDENTE"],
+                      var_name="STATUS", value_name="PERCENTUAL")
+df_plot["STATUS"] = df_plot["STATUS"].str.replace("% ", "").str.capitalize()
+
 fig_trend = px.line(
-    df_trend,
+    df_plot,
     x="DATA_INSPECAO",
-    y="TECNICO",
-    color="STATUS",
-    color_discrete_map={"OK": "green", "PENDENTE": "red"},
+    y="PERCENTUAL",
+    color="COORDENADOR",
+    line_dash="STATUS",
     markers=True,
-    title="📈 Tendência de Técnicos OK vs Pendentes"
+    title="📈 Percentual diário de Técnicos OK vs Pendentes por Coordenador"
 )
 st.plotly_chart(fig_trend, use_container_width=True)
 
@@ -131,13 +149,10 @@ if not df_pendentes.empty:
     )
 
 # =============================
-# Tabela de Percentual por Coordenador
+# Tabelas
 # =============================
 st.markdown("### 📊 Percentual de Técnicos por Coordenador")
 st.dataframe(contagem_coord[["COORDENADOR", "TOTAL", "OK", "PENDENTE", "% OK", "% PENDENTE"]])
 
-# =============================
-# Tabela de Pendentes
-# =============================
 st.markdown("### 📋 Técnicos Pendentes")
 st.dataframe(df_pendentes[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE", "DATA_INSPECAO", "STATUS"]])
