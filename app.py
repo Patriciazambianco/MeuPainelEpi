@@ -47,9 +47,6 @@ total_geral = total_ok + total_pendente
 perc_ok = total_ok/total_geral*100 if total_geral>0 else 0
 perc_pendente = total_pendente/total_geral*100 if total_geral>0 else 0
 
-# Técnicos únicos
-def tem_saldo(s: pd.Series) -> bool:
-    return (~(s.isna() | s.astype(str).str.strip().eq(""))).any()
 
 g_tecnicos = df_filtrado.groupby("TECNICO").agg(
     pendente=("PERSONALIZAR", lambda s: (s == "PENDENTE").any()),
