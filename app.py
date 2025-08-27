@@ -191,7 +191,7 @@ st.dataframe(
         .drop_duplicates(subset=["TECNICO"])  # mostra 1 linha por técnico
 )
 
-st.download_button)
+st.download_button
     label="📥 Baixar Pendentes sem Saldo (técnicos únicos)",
     data=to_excel(
         df_pend_sem_saldo_tecnicos[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE","SALDO_VOLANTE"]]
