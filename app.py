@@ -197,4 +197,5 @@ st.download_button(
         df_pend_sem_saldo_tecnicos[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE","SALDO_VOLANTE"]]
         .drop_duplicates(subset=["TECNICO"])
     ),
-    file_name="epi_pendentes_sem_saldo_te
+      file_name="epi_pendentes_sem_saldo_tecnicos.csv",
+    mime="text/csv"
