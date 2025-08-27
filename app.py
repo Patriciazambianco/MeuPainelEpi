@@ -6,7 +6,7 @@ from io import BytesIO
 st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
 st.title("🦺 INSPEÇÕES EPI")
 
-# --- Carregar dados ---
+
 @st.cache_data
 def carregar_dados(url):
     df = pd.read_excel(url)
@@ -39,9 +39,6 @@ if coordenador_sel != "Todos":
 if produto_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["PRODUTO_SIMILAR"] == produto_sel]
 
-# =========================
-# ======= MÉTRICAS ========
-# =========================
 
 # Cards baseados em linhas
 total_ok = (df_filtrado["PERSONALIZAR"]=="OK").sum()
@@ -71,11 +68,10 @@ perc_pendentes_sem_saldo = (tec_pend_sem_saldo / tec_pend * 100) if tec_pend > 0
 
 # --- Layout dos cards ---
 c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("✅ Técnicos OK (linhas)", total_ok)
-c2.metric("📊 % OK (linhas)", f"{perc_ok:.1f}%")
-c3.metric("⚠️ Pendentes (linhas)", total_pendente)
-c4.metric("📊 % Pendentes (linhas)", f"{perc_pendente:.1f}%")
-c5.metric("👤 Técnicos únicos", tec_total)
+c1.metric("✅ Técnicos OK", total_ok)
+c2.metric("📊 % OK", f"{perc_ok:.1f}%")
+c3.metric("⚠️ Pendentes", total_pendente)
+c4.metric("📊 % Pendentes", f"{perc_pendente:.1f}%")
 c6.metric("💸 Técnicos sem Saldo (únicos)", tec_sem_saldo)
 
 d1, d2, d3 = st.columns(3)
