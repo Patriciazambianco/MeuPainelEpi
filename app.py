@@ -129,7 +129,7 @@ st.download_button(
 
 
 df_sem_saldo = df_filtrado[df_filtrado["SALDO_VOLANTE"].isna() | (df_filtrado["SALDO_VOLANTE"].astype(str).str.strip() == "")]
-st.markdown("### 💸 Técnicos sem Saldo Volante")
+st.markdown("### 📥 Técnicos sem Saldo Volante")
 st.dataframe(df_sem_saldo[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE","SALDO_VOLANTE"]])
 
 st.download_button(
