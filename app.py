@@ -6,7 +6,7 @@ from io import BytesIO
 st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
 st.title("🦺 INSPEÇÕES EPI")
 
-# --- Carregar dados com cache ---
+
 @st.cache_data
 def carregar_dados(url):
     df = pd.read_excel(url)
@@ -21,7 +21,7 @@ def carregar_dados(url):
 url = "https://github.com/Patriciazambianco/MeuPainelEpi/raw/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = carregar_dados(url)
 
-# --- Sidebar Filtros ---
+
 st.sidebar.header("🎯 Filtros")
 gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
 coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
@@ -39,7 +39,7 @@ if coordenador_sel != "Todos":
 if produto_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["PRODUTO_SIMILAR"] == produto_sel]
 
-# --- Cards gerais ---
+
 total_ok = (df_filtrado["PERSONALIZAR"]=="OK").sum()
 total_pendente = (df_filtrado["PERSONALIZAR"]=="PENDENTE").sum()
 total_geral = total_ok + total_pendente
@@ -52,7 +52,6 @@ c2.metric("📊 % OK", f"{perc_ok:.1f}%")
 c3.metric("⚠️ Pendentes", total_pendente)
 c4.metric("📊 % Pendentes", f"{perc_pendente:.1f}%")
 
-# --- Gráfico por Gerente ---
 cont_ger = df_filtrado.groupby(["GERENTE","PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 for col in ["OK","PENDENTE"]:
     if col not in cont_ger.columns:
@@ -72,7 +71,7 @@ fig_ger.update_traces(textposition='outside')
 fig_ger.update_layout(yaxis=dict(range=[0,110]), uniformtext_minsize=8, uniformtext_mode='hide')
 st.plotly_chart(fig_ger,use_container_width=True)
 
-# --- Gráfico por Coordenador ---
+
 cont_coord = df_filtrado.groupby(["COORDENADOR","PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 for col in ["OK","PENDENTE"]:
     if col not in cont_coord.columns:
@@ -92,7 +91,7 @@ fig_coord.update_traces(textposition='outside')
 fig_coord.update_layout(yaxis=dict(range=[0,110]), uniformtext_minsize=8, uniformtext_mode='hide')
 st.plotly_chart(fig_coord,use_container_width=True)
 
-# --- Gráfico por Produto (Percentual de Pendências) ---
+
 cont_prod = df_filtrado.groupby(["PRODUTO_SIMILAR","PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
 for col in ["OK","PENDENTE"]:
     if col not in cont_prod.columns:
@@ -108,12 +107,12 @@ fig_prod.update_traces(textposition='outside')
 fig_prod.update_layout(yaxis=dict(range=[0,110]))
 st.plotly_chart(fig_prod,use_container_width=True)
 
-# --- Tabela Pendentes ---
+
 df_pendentes = df_filtrado[df_filtrado["PERSONALIZAR"]=="PENDENTE"]
 st.markdown("### 📋 Técnicos Pendentes")
 st.dataframe(df_pendentes[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE","PERSONALIZAR"]])
 
-# --- Botão de Download Pendentes ---
+
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -128,7 +127,7 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-# --- Técnicos sem saldo volante ---
+
 df_sem_saldo = df_filtrado[df_filtrado["SALDO_VOLANTE"].isna() | (df_filtrado["SALDO_VOLANTE"].astype(str).str.strip() == "")]
 st.markdown("### 💸 Técnicos sem Saldo Volante")
 st.dataframe(df_sem_saldo[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE","SALDO_VOLANTE"]])
