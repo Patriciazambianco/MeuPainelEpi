@@ -68,9 +68,7 @@ perc_pendentes_sem_saldo = (tec_pend_sem_saldo / tec_pend * 100) if tec_pend > 0
 
 # --- Layout dos cards ---
 c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("✅ Técnicos OK", total_ok)
 c2.metric("📊 % OK", f"{perc_ok:.1f}%")
-c3.metric("⚠️ Pendentes", total_pendente)
 c4.metric("📊 % Pendentes", f"{perc_pendente:.1f}%")
 c6.metric("💸 Técnicos sem Saldo (únicos)", tec_sem_saldo)
 
