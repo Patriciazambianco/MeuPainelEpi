@@ -136,7 +136,7 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-
+# Pendentes sem saldo volante (técnicos únicos)
 idx_pend_sem_saldo = g_tecnicos.index[(g_tecnicos["pendente"] == True) & (g_tecnicos["tem_saldo"] == False)]
 df_pend_sem_saldo_tecnicos = df_filtrado[df_filtrado["TECNICO"].isin(idx_pend_sem_saldo)]
 df_pend_sem_saldo_tecnicos = df_pend_sem_saldo_tecnicos.drop_duplicates(subset=["TECNICO"]).sort_values(["GERENTE","COORDENADOR","TECNICO"])
