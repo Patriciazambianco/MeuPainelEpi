@@ -47,7 +47,7 @@ perc_ok = total_ok/total_geral*100 if total_geral>0 else 0
 perc_pendente = total_pendente/total_geral*100 if total_geral>0 else 0
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("✅ Técnicos OK", total_ok)
+c1.metric("✅ Inspeções OK", total_ok)
 c2.metric("📊 % OK", f"{perc_ok:.1f}%")
 c3.metric("⚠️ Pendentes", total_pendente)
 c4.metric("📊 % Pendentes", f"{perc_pendente:.1f}%")
