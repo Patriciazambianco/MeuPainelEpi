@@ -53,7 +53,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 🧠 TÍTULO
-st.title("🦺 Painel EPI - Técnicos OK e Pendentes")
+st.title("🦺 Check List EPI - Técnicos OK e Pendentes")
 
 # 🚀 FUNÇÃO DE CARGA
 @st.cache_data
