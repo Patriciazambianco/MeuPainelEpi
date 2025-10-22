@@ -3,139 +3,200 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-st.set_page_config(page_title="Dashboard de Inspeções EPI", layout="wide", page_icon="🧤")
+# 🎨 CONFIGURAÇÃO GERAL
+st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
 
-# ============================
-# 🎨 ESTILO E CORES
-# ============================
+# CSS personalizado 💅
 st.markdown("""
     <style>
-    .main {background-color: #f4f6f9;}
-    h1, h2, h3, h4, h5 {color: #003366;}
-    .stButton>button {
-        background-color: #00bfa6;
+    .stApp {
+        background: linear-gradient(120deg, #f8fbff, #f3e5f5);
+    }
+    h1 {
+        text-align: center;
+        color: #1b5e20;
+        font-weight: 800;
+        font-size: 2.2rem;
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+        margin-bottom: 1rem;
+    }
+    .metric-card {
+        padding: 15px;
+        border-radius: 15px;
+        color: white;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0px 3px 10px rgba(0,0,0,0.2);
+        transition: transform 0.3s;
+    }
+    .metric-card:hover {
+        transform: scale(1.05);
+    }
+    .ok-card {background: linear-gradient(135deg, #2ecc71, #27ae60);}
+    .pendente-card {background: linear-gradient(135deg, #e74c3c, #c0392b);}
+    .percent-ok-card {background: linear-gradient(135deg, #3498db, #2980b9);}
+    .percent-pend-card {background: linear-gradient(135deg, #f1c40f, #f39c12);}
+    .stDownloadButton button {
+        background-color: #1b5e20;
         color: white;
         font-weight: bold;
         border-radius: 10px;
         border: none;
-        padding: 0.6em 1.2em;
+        box-shadow: 0px 3px 6px rgba(0,0,0,0.2);
     }
-    .stButton>button:hover {
-        background-color: #009e8c;
-        color: white;
+    .stDownloadButton button:hover {
+        background-color: #43a047;
+        transform: scale(1.03);
+        transition: 0.2s;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# ============================
-# 📥 LEITURA DOS DADOS
-# ============================
+# 🧠 TÍTULO
+st.title("🦺 Painel EPI - Técnicos OK e Pendentes")
+
+# 🚀 FUNÇÃO DE CARGA
 @st.cache_data
 def carregar_dados(url):
-    df = pd.read_excel(url, engine="openpyxl")
+    df = pd.read_excel(url)
     df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
-
-    if "PERSONALIZAR" in df.columns:
-        df["PERSONALIZAR"] = (
-            df["PERSONALIZAR"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
-        )
-
-    # Renomeia coluna "PRODUTO_SIMILAR" para "EPI"
-    if "PRODUTO_SIMILAR" in df.columns:
-        df = df.rename(columns={"PRODUTO_SIMILAR": "EPI"})
-
+    df["PERSONALIZAR"] = (
+        df["PERSONALIZAR"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        .replace({"CHECK LIST OK": "OK", "PENDENTE": "PENDENTE"})
+    )
     return df
 
-url = st.text_input("🔗 Cole o link do arquivo Excel no GitHub:", "")
-if url:
-    df = carregar_dados(url)
+# 🔗 URL
+url = "https://github.com/Patriciazambianco/MeuPainelEpi/raw/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
+df = carregar_dados(url)
 
-    st.title("🧤 Dashboard de Inspeções de EPI")
-    st.markdown("### Acompanhe o status de inspeções por gerente, coordenador e tipo de EPI.")
+# 🎯 FILTROS
+st.sidebar.header("🎯 Filtros")
+gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
+coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
+produtos = ["Todos"] + sorted(df["PRODUTO_SIMILAR"].dropna().unique())
 
-    # ============================
-    # 🔍 FILTROS
-    # ============================
-    col1, col2, col3 = st.columns(3)
-    gerente_sel = col1.selectbox("👩‍💼 Selecione o Gerente:", ["Todos"] + sorted(df["GERENTE"].dropna().unique().tolist()))
-    coord_sel = col2.selectbox("🧑‍🔧 Selecione o Coordenador:", ["Todos"] + sorted(df["COORDENADOR"].dropna().unique().tolist()))
-    epi_sel = col3.selectbox("🧤 Selecione o EPI:", ["Todos"] + sorted(df["EPI"].dropna().unique().tolist()))
+gerente_sel = st.sidebar.selectbox("👩‍💼 Gerente", gerentes)
+coordenador_sel = st.sidebar.selectbox("🧑‍🏭 Coordenador", coordenadores)
+produto_sel = st.sidebar.selectbox("🧰 Produto", produtos)
 
-    df_filtrado = df.copy()
-    if gerente_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_sel]
-    if coord_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coord_sel]
-    if epi_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["EPI"] == epi_sel]
+df_filtrado = df.copy()
+if gerente_sel != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_sel]
+if coordenador_sel != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
+if produto_sel != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["PRODUTO_SIMILAR"] == produto_sel]
 
-    # ============================
-    # 📊 FUNÇÃO GENÉRICA DE GRÁFICO
-    # ============================
-    def grafico_percentual(df, grupo, titulo, cores):
-        cont = df.groupby([grupo, "PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
-        for col in ["OK", "PENDENTE"]:
-            if col not in cont.columns:
-                cont[col] = 0
-        cont["TOTAL"] = cont["OK"] + cont["PENDENTE"]
-        cont["% OK"] = (cont["OK"] / cont["TOTAL"] * 100).where(cont["TOTAL"] > 0, 0)
-        cont["% PENDENTE"] = (cont["PENDENTE"] / cont["TOTAL"] * 100).where(cont["TOTAL"] > 0, 0)
+# 📈 MÉTRICAS COLORIDAS
+total_ok = (df_filtrado["PERSONALIZAR"]=="OK").sum()
+total_pendente = (df_filtrado["PERSONALIZAR"]=="PENDENTE").sum()
+total_geral = total_ok + total_pendente
+perc_ok = total_ok/total_geral*100 if total_geral>0 else 0
+perc_pendente = total_pendente/total_geral*100 if total_geral>0 else 0
 
-        df_bar = cont.melt(id_vars=[grupo], value_vars=["% OK", "% PENDENTE"],
-                           var_name="STATUS", value_name="PERCENTUAL")
-        df_bar["STATUS"] = df_bar["STATUS"].str.replace("% ", "")
+c1, c2, c3, c4 = st.columns(4)
 
-        fig = px.bar(
-            df_bar, x=grupo, y="PERCENTUAL", color="STATUS",
-            barmode="group", text=df_bar["PERCENTUAL"].apply(lambda x: f"{x:.1f}%"),
-            color_discrete_map=cores, title=titulo
-        )
-        fig.update_traces(textposition="outside")
-        fig.update_layout(
-            yaxis_title="Percentual (%)",
-            xaxis_title=grupo,
-            xaxis=dict(categoryorder="total descending"),
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            title_font=dict(size=20, color="#003366", family="Arial Black")
-        )
-        return fig
+with c1:
+    st.markdown(f"""
+    <div class='metric-card ok-card'>
+        <h3>✅ Inspeções OK</h3>
+        <h2>{total_ok}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ============================
-    # 🧮 GRÁFICOS COLORIDOS
-    # ============================
-    cores = {"OK": "#00c853", "PENDENTE": "#ff1744"}
+with c2:
+    st.markdown(f"""
+    <div class='metric-card percent-ok-card'>
+        <h3>📊 % OK</h3>
+        <h2>{perc_ok:.1f}%</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.plotly_chart(grafico_percentual(df_filtrado, "GERENTE", "📈 Percentual por Gerente", cores), use_container_width=True)
-    st.plotly_chart(grafico_percentual(df_filtrado, "COORDENADOR", "🧭 Percentual por Coordenador", cores), use_container_width=True)
-    st.plotly_chart(grafico_percentual(df_filtrado, "EPI", "🧤 Percentual por Tipo de EPI", cores), use_container_width=True)
+with c3:
+    st.markdown(f"""
+    <div class='metric-card pendente-card'>
+        <h3>⚠️ Pendentes</h3>
+        <h2>{total_pendente}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ============================
-    # 🚨 TABELA DE PENDENTES
-    # ============================
-    st.markdown("## 🚨 Pendências de EPI")
-    df_pendentes = df_filtrado[df_filtrado["PERSONALIZAR"] == "PENDENTE"]
-    st.dataframe(df_pendentes[["TECNICO", "GERENTE", "COORDENADOR", "EPI"]])
+with c4:
+    st.markdown(f"""
+    <div class='metric-card percent-pend-card'>
+        <h3>📉 % Pendentes</h3>
+        <h2>{perc_pendente:.1f}%</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ============================
-    # 💾 DOWNLOAD
-    # ============================
-    def to_excel(df):
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False)
-        return output.getvalue()
+# 🔄 FUNÇÃO DE GRÁFICO
+def grafico_percentual(df, grupo, titulo):
+    cont = df.groupby([grupo, "PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+    for col in ["OK", "PENDENTE"]:
+        if col not in cont.columns:
+            cont[col] = 0
+    cont["TOTAL"] = cont["OK"] + cont["PENDENTE"]
+    cont["% OK"] = (cont["OK"]/cont["TOTAL"]*100).where(cont["TOTAL"]>0,0)
+    cont["% PENDENTE"] = (cont["PENDENTE"]/cont["TOTAL"]*100).where(cont["TOTAL"]>0,0)
+    
+    df_bar = cont.melt(id_vars=[grupo], value_vars=["% OK", "% PENDENTE"], var_name="STATUS", value_name="PERCENTUAL")
+    df_bar["STATUS"] = df_bar["STATUS"].str.replace("% ","")
 
-    st.download_button(
-        label="📥 Baixar Pendências (Excel)",
-        data=to_excel(df_pendentes),
-        file_name="pendencias_epi.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    fig = px.bar(df_bar, x=grupo, y="PERCENTUAL", color="STATUS",
+                 color_discrete_map={"OK":"#2ecc71","PENDENTE":"#e74c3c"},
+                 text=df_bar["PERCENTUAL"].apply(lambda x:f"{x:.1f}%"),
+                 barmode="group", title=titulo)
+    fig.update_traces(textposition="outside")
+    fig.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        yaxis_title="Percentual (%)",
+        xaxis=dict(categoryorder="total descending"),
+        title_font=dict(size=18, color="#1b5e20")
     )
+    return fig
 
-else:
-    st.info("👆 Cole o link do Excel do GitHub para carregar os dados.")
+# 📊 GRÁFICOS
+st.plotly_chart(grafico_percentual(df_filtrado, "GERENTE", "📈 Técnicos OK x Pendentes por Gerente"), use_container_width=True)
+st.plotly_chart(grafico_percentual(df_filtrado, "COORDENADOR", "📈 Técnicos OK x Pendentes por Coordenador"), use_container_width=True)
+
+# 📦 PRODUTOS
+cont_prod = df_filtrado.groupby(["PRODUTO_SIMILAR","PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+for col in ["OK","PENDENTE"]:
+    if col not in cont_prod.columns:
+        cont_prod[col]=0
+cont_prod["TOTAL"] = cont_prod["OK"]+cont_prod["PENDENTE"]
+cont_prod["% PENDENTE"] = (cont_prod["PENDENTE"]/cont_prod["TOTAL"]*100).where(cont_prod["TOTAL"]>0,0)
+
+fig_prod = px.bar(cont_prod, x="PRODUTO_SIMILAR", y="% PENDENTE",
+                  text=cont_prod["% PENDENTE"].apply(lambda x:f"{x:.1f}%"),
+                  color_discrete_sequence=["#f39c12"],
+                  title="🧰 % de Pendências por Produto")
+fig_prod.update_traces(textposition='outside')
+st.plotly_chart(fig_prod,use_container_width=True)
+
+# 📋 TABELAS
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Dados")
+    output.seek(0)
+    return output
+
+df_pendentes = df_filtrado[df_filtrado["PERSONALIZAR"]=="PENDENTE"]
+st.markdown("### 📋 Técnicos Pendentes")
+st.dataframe(df_pendentes[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE","PERSONALIZAR"]])
+
+st.download_button("📥 Baixar Pendentes (Excel)", data=to_excel(df_pendentes),
+                   file_name="epi_tecnicos_pendentes.xlsx")
+
+df_sem_saldo = df_filtrado[df_filtrado["SALDO_VOLANTE"].isna() | (df_filtrado["SALDO_VOLANTE"].astype(str).str.strip() == "")]
+st.markdown("### 📋 Técnicos sem Saldo Volante")
+st.dataframe(df_sem_saldo[["TECNICO","PRODUTO_SIMILAR","COORDENADOR","GERENTE","SALDO_VOLANTE"]])
+
+st.download_button("📥 Baixar Técnicos sem Saldo Volante (Excel)", 
+                   data=to_excel(df_sem_saldo),
+                   file_name="epi_tecnicos_sem_saldo.xlsx")
