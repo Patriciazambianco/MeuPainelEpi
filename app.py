@@ -6,44 +6,54 @@ from io import BytesIO
 # 🎨 CONFIGURAÇÃO GERAL
 st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
 
-# CSS customizado 💅
+# CSS personalizado 💅
 st.markdown("""
     <style>
-    body {
-        background: linear-gradient(120deg, #e3f2fd, #f3e5f5);
-    }
     .stApp {
-        background: linear-gradient(120deg, #e3f2fd, #f3e5f5);
+        background: linear-gradient(120deg, #f8fbff, #f3e5f5);
     }
     h1 {
         text-align: center;
-        color: #2e7d32;
-        font-weight: bold;
+        color: #1b5e20;
+        font-weight: 800;
+        font-size: 2.2rem;
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+        margin-bottom: 1rem;
     }
-    div[data-testid="metric-container"] {
-        background: linear-gradient(135deg, #ffffff, #e8f5e9);
-        border-radius: 15px;
+    .metric-card {
         padding: 15px;
-        box-shadow: 0px 3px 8px rgba(0,0,0,0.1);
+        border-radius: 15px;
+        color: white;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0px 3px 10px rgba(0,0,0,0.2);
+        transition: transform 0.3s;
     }
-    div[data-testid="metric-container"]:hover {
-        transform: scale(1.03);
-        transition: 0.3s;
+    .metric-card:hover {
+        transform: scale(1.05);
     }
+    .ok-card {background: linear-gradient(135deg, #2ecc71, #27ae60);}
+    .pendente-card {background: linear-gradient(135deg, #e74c3c, #c0392b);}
+    .percent-ok-card {background: linear-gradient(135deg, #3498db, #2980b9);}
+    .percent-pend-card {background: linear-gradient(135deg, #f1c40f, #f39c12);}
     .stDownloadButton button {
-        background-color: #2e7d32;
+        background-color: #1b5e20;
         color: white;
         font-weight: bold;
         border-radius: 10px;
+        border: none;
+        box-shadow: 0px 3px 6px rgba(0,0,0,0.2);
     }
     .stDownloadButton button:hover {
-        background-color: #1b5e20;
+        background-color: #43a047;
+        transform: scale(1.03);
+        transition: 0.2s;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # 🧠 TÍTULO
-st.title("🦺 **Painel de Inspeções EPI - Técnicos OK e Pendentes**")
+st.title("🦺 Painel EPI - Técnicos OK e Pendentes")
 
 # 🚀 FUNÇÃO DE CARGA
 @st.cache_data
@@ -89,10 +99,38 @@ perc_ok = total_ok/total_geral*100 if total_geral>0 else 0
 perc_pendente = total_pendente/total_geral*100 if total_geral>0 else 0
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("✅ Inspeções OK", total_ok)
-c2.metric("📊 % OK", f"{perc_ok:.1f}%")
-c3.metric("⚠️ Pendentes", total_pendente)
-c4.metric("📊 % Pendentes", f"{perc_pendente:.1f}%")
+
+with c1:
+    st.markdown(f"""
+    <div class='metric-card ok-card'>
+        <h3>✅ Inspeções OK</h3>
+        <h2>{total_ok}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c2:
+    st.markdown(f"""
+    <div class='metric-card percent-ok-card'>
+        <h3>📊 % OK</h3>
+        <h2>{perc_ok:.1f}%</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c3:
+    st.markdown(f"""
+    <div class='metric-card pendente-card'>
+        <h3>⚠️ Pendentes</h3>
+        <h2>{total_pendente}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c4:
+    st.markdown(f"""
+    <div class='metric-card percent-pend-card'>
+        <h3>📉 % Pendentes</h3>
+        <h2>{perc_pendente:.1f}%</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
 # 🔄 FUNÇÃO DE GRÁFICO
 def grafico_percentual(df, grupo, titulo):
@@ -117,13 +155,13 @@ def grafico_percentual(df, grupo, titulo):
         paper_bgcolor="rgba(0,0,0,0)",
         yaxis_title="Percentual (%)",
         xaxis=dict(categoryorder="total descending"),
-        title_font=dict(size=18, color="#2e7d32")
+        title_font=dict(size=18, color="#1b5e20")
     )
     return fig
 
-# 📊 GRÁFICOS COLORIDOS
-st.plotly_chart(grafico_percentual(df_filtrado, "GERENTE", "📈 % Técnicos OK x Pendentes por Gerente"), use_container_width=True)
-st.plotly_chart(grafico_percentual(df_filtrado, "COORDENADOR", "📈 % Técnicos OK x Pendentes por Coordenador"), use_container_width=True)
+# 📊 GRÁFICOS
+st.plotly_chart(grafico_percentual(df_filtrado, "GERENTE", "📈 Técnicos OK x Pendentes por Gerente"), use_container_width=True)
+st.plotly_chart(grafico_percentual(df_filtrado, "COORDENADOR", "📈 Técnicos OK x Pendentes por Coordenador"), use_container_width=True)
 
 # 📦 PRODUTOS
 cont_prod = df_filtrado.groupby(["PRODUTO_SIMILAR","PERSONALIZAR"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
@@ -135,7 +173,7 @@ cont_prod["% PENDENTE"] = (cont_prod["PENDENTE"]/cont_prod["TOTAL"]*100).where(c
 
 fig_prod = px.bar(cont_prod, x="PRODUTO_SIMILAR", y="% PENDENTE",
                   text=cont_prod["% PENDENTE"].apply(lambda x:f"{x:.1f}%"),
-                  color_discrete_sequence=["#e74c3c"],
+                  color_discrete_sequence=["#f39c12"],
                   title="🧰 % de Pendências por Produto")
 fig_prod.update_traces(textposition='outside')
 st.plotly_chart(fig_prod,use_container_width=True)
