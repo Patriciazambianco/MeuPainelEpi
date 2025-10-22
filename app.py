@@ -4,7 +4,7 @@ import plotly.express as px
 from io import BytesIO
 
 # 🎨 CONFIGURAÇÃO GERAL
-st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
+st.set_page_config(page_title="Relatório de EPI - Técnicos OK/Pendentes", layout="wide")
 
 # CSS personalizado 💅
 st.markdown("""
