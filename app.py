@@ -21,8 +21,8 @@ st.markdown("""
         margin-bottom: 1rem;
     }
     .metric-card {
-        padding: 15px;
-        border-radius: 15px;
+        padding: 13px;
+        border-radius: 13px;
         color: white;
         font-weight: bold;
         text-align: center;
