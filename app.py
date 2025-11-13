@@ -1,50 +1,17 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from io import BytesIO
 
-# 🎨 CONFIGURAÇÃO GERAL
-st.set_page_config(page_title="Check List EPI - Técnicos OK/Pendentes", layout="wide")
+st.set_page_config(page_title="Painel EPI - Técnicos OK/Pendentes", layout="wide")
+st.title("🦺 INSPEÇÕES EPI")
 
-# 💅 CSS personalizado
-st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(120deg, #f8fbff, #f3e5f5);
-    }
-    h1 {
-        text-align: center;
-        color: #1b5e20;
-        font-weight: 800;
-        font-size: 2.2rem;
-        text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
-        margin-bottom: 1rem;
-    }
-    .metric-card {
-        padding: 13px;
-        border-radius: 13px;
-        color: white;
-        font-weight: bold;
-        text-align: center;
-        box-shadow: 0px 3px 10px rgba(0,0,0,0.2);
-        transition: transform 0.3s;
-    }
-    .metric-card:hover {
-        transform: scale(1.05);
-    }
-    .ok-card {background: linear-gradient(135deg, #2ecc71, #27ae60);}
-    .pendente-card {background: linear-gradient(135deg, #e74c3c, #c0392b);}
-    </style>
-""", unsafe_allow_html=True)
-
-# 🧠 TÍTULO
-st.title("🦺 Check List EPI - Técnicos OK e Pendentes")
-
-# 🚀 FUNÇÃO DE CARGA E PADRONIZAÇÃO
 @st.cache_data
 def carregar_dados(url):
     df = pd.read_excel(url)
     df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
+    # Padroniza status
     if "STATUS_CHECK_LIST" in df.columns:
         df["STATUS_CHECK_LIST"] = (
             df["STATUS_CHECK_LIST"]
@@ -59,105 +26,99 @@ def carregar_dados(url):
             })
         )
     else:
-        st.warning("⚠️ A coluna 'STATUS_CHECK_LIST' não existe na base. Todos foram marcados como 'PENDENTE'.")
+        st.warning("⚠️ Coluna 'STATUS_CHECK_LIST' não encontrada. Todos os registros marcados como 'PENDENTE'.")
         df["STATUS_CHECK_LIST"] = "PENDENTE"
+
+    # Garante existência das colunas de hierarquia
+    for col in ["GERENTE_IMEDIATO", "COORDENADOR_IMEDIATO"]:
+        if col not in df.columns:
+            df[col] = "NÃO INFORMADO"
 
     return df
 
-# 🔗 URL DO ARQUIVO
-url = "https://github.com/Patriciazambianco/MeuPainelEpi/raw/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-
-# 🧩 CARREGAMENTO
+# ======= LEITURA =======
+url = "https://link_para_sua_planilha.xlsx"  # <-- Substitua aqui!
 df = carregar_dados(url)
 
-# 📊 MÉTRICAS GERAIS
+# ======= MÉTRICAS GERAIS =======
 total = len(df)
 qtd_ok = (df["STATUS_CHECK_LIST"] == "OK").sum()
 qtd_pend = (df["STATUS_CHECK_LIST"] == "PENDENTE").sum()
+
 perc_ok = round((qtd_ok / total) * 100, 1) if total > 0 else 0
 perc_pend = round((qtd_pend / total) * 100, 1) if total > 0 else 0
 
-# 🎯 MÉTRICAS COLORIDAS
 col1, col2 = st.columns(2)
-with col1:
-    st.markdown(f"""
-    <div class='metric-card ok-card'>
-        <h3>✅ % OK</h3>
-        <h2>{perc_ok:.1f}%</h2>
-        <p>{qtd_ok} de {total}</p>
-    </div>
-    """, unsafe_allow_html=True)
-with col2:
-    st.markdown(f"""
-    <div class='metric-card pendente-card'>
-        <h3>⚠️ % Pendentes</h3>
-        <h2>{perc_pend:.1f}%</h2>
-        <p>{qtd_pend} de {total}</p>
-    </div>
-    """, unsafe_allow_html=True)
+col1.metric("✅ % OK Geral", f"{perc_ok}%", f"{qtd_ok} de {total}")
+col2.metric("⚠️ % Pendentes", f"{perc_pend}%", f"{qtd_pend} de {total}")
 
-# 📈 FUNÇÃO PARA GRÁFICO DE % POR GRUPO
-def grafico_percentual(df, grupo, titulo):
-    cont = (
-        df.groupby([grupo, "STATUS_CHECK_LIST"])["TECNICO"]
-        .nunique()
-        .unstack(fill_value=0)
-        .reset_index()
-    )
+# ======= GRÁFICO DE PIZZA =======
+df_pizza = pd.DataFrame({
+    "Status": ["OK", "PENDENTE"],
+    "Quantidade": [qtd_ok, qtd_pend]
+})
+fig_pizza = px.pie(
+    df_pizza,
+    names="Status",
+    values="Quantidade",
+    color="Status",
+    color_discrete_map={"OK": "mediumseagreen", "PENDENTE": "tomato"},
+    title="Distribuição Geral de Checklists"
+)
+fig_pizza.update_traces(textinfo="percent+label", pull=[0.05, 0])
+st.plotly_chart(fig_pizza, use_container_width=True)
 
-    for col in ["OK", "PENDENTE"]:
-        if col not in cont.columns:
-            cont[col] = 0
+# ======= AGRUPAMENTO POR GERENTE E COORDENADOR =======
+st.subheader("📊 Percentual por Gerente e Coordenador")
 
-    cont["TOTAL"] = cont["OK"] + cont["PENDENTE"]
-    cont["% OK"] = (cont["OK"] / cont["TOTAL"] * 100).round(1)
-    cont["% PENDENTE"] = (cont["PENDENTE"] / cont["TOTAL"] * 100).round(1)
+df_group = (
+    df.groupby(["GERENTE_IMEDIATO", "COORDENADOR_IMEDIATO", "STATUS_CHECK_LIST"])
+    .size()
+    .unstack(fill_value=0)
+    .reset_index()
+)
 
-    df_bar = cont.melt(
-        id_vars=[grupo],
-        value_vars=["% OK", "% PENDENTE"],
-        var_name="STATUS",
-        value_name="PERCENTUAL"
-    )
-    df_bar["STATUS"] = df_bar["STATUS"].str.replace("% ", "")
+# Garante colunas mesmo se faltarem
+if "OK" not in df_group.columns:
+    df_group["OK"] = 0
+if "PENDENTE" not in df_group.columns:
+    df_group["PENDENTE"] = 0
 
-    fig = px.bar(
-        df_bar,
-        x=grupo,
-        y="PERCENTUAL",
-        color="STATUS",
-        color_discrete_map={"OK": "#2ecc71", "PENDENTE": "#e74c3c"},
-        text=df_bar["PERCENTUAL"].apply(lambda x: f"{x:.1f}%"),
-        barmode="group",
-        title=titulo
-    )
-    fig.update_traces(textposition="outside")
-    fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        yaxis_title="Percentual (%)",
-        xaxis=dict(categoryorder="total descending"),
-        title_font=dict(size=18, color="#1b5e20")
-    )
-    return fig
+df_group["TOTAL"] = df_group["OK"] + df_group["PENDENTE"]
+df_group["%OK"] = round((df_group["OK"] / df_group["TOTAL"]) * 100, 1)
+df_group["%PENDENTE"] = round((df_group["PENDENTE"] / df_group["TOTAL"]) * 100, 1)
 
-# 📊 GRÁFICOS POR GERENTE E COORDENADOR
-if "GERENTE" in df.columns:
-    st.plotly_chart(
-        grafico_percentual(df, "GERENTE", "📈 Técnicos OK x Pendentes por Gerente"),
-        use_container_width=True
-    )
-else:
-    st.warning("⚠️ Coluna 'GERENTE' não encontrada na base.")
+# Gráfico de barras
+fig_bar = px.bar(
+    df_group,
+    x="COORDENADOR_IMEDIATO",
+    y="%OK",
+    color="GERENTE_IMEDIATO",
+    title="✅ % OK por Coordenador e Gerente",
+    barmode="group",
+    text="%OK",
+)
+fig_bar.update_layout(yaxis_title="% OK", xaxis_title="Coordenador", xaxis_tickangle=-30)
+st.plotly_chart(fig_bar, use_container_width=True)
 
-if "COORDENADOR" in df.columns:
-    st.plotly_chart(
-        grafico_percentual(df, "COORDENADOR", "📊 Técnicos OK x Pendentes por Coordenador"),
-        use_container_width=True
+# ======= BOTÃO PARA DOWNLOAD =======
+pendentes = df[df["STATUS_CHECK_LIST"] == "PENDENTE"]
+
+st.subheader("⬇️ Download de Pendências")
+st.write(f"Total de pendências: **{len(pendentes)}**")
+
+if len(pendentes) > 0:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        pendentes.to_excel(writer, index=False, sheet_name="Pendentes")
+    st.download_button(
+        label="📥 Baixar Pendentes em Excel",
+        data=output.getvalue(),
+        file_name="Pendentes_Checklist.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 else:
-    st.warning("⚠️ Coluna 'COORDENADOR' não encontrada na base.")
+    st.info("🎉 Nenhum registro pendente encontrado!")
 
-# 📋 PRÉVIA DOS DADOS
-st.markdown("### 📋 Prévia dos Dados")
-st.dataframe(df.head())
+# ======= MOSTRA A TABELA FINAL =======
+st.dataframe(df)
