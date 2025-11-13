@@ -1,103 +1,61 @@
+import plotly.express as px
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from io import BytesIO
 
-# 🎨 CONFIGURAÇÃO GERAL
-st.set_page_config(page_title="Check List  EPI - Técnicos OK/Pendentes", layout="wide")
-
-# CSS personalizado 💅
-st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(120deg, #f8fbff, #f3e5f5);
-    }
-    h1 {
-        text-align: center;
-        color: #1b5e20;
-        font-weight: 800;
-        font-size: 2.2rem;
-        text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
-        margin-bottom: 1rem;
-    }
-    .metric-card {
-        padding: 13px;
-        border-radius: 13px;
-        color: white;
-        font-weight: bold;
-        text-align: center;
-        box-shadow: 0px 3px 10px rgba(0,0,0,0.2);
-        transition: transform 0.3s;
-    }
-    .metric-card:hover {
-        transform: scale(1.05);
-    }
-    .ok-card {background: linear-gradient(135deg, #2ecc71, #27ae60);}
-    .pendente-card {background: linear-gradient(135deg, #e74c3c, #c0392b);}
-    .percent-ok-card {background: linear-gradient(135deg, #3498db, #2980b9);}
-    .percent-pend-card {background: linear-gradient(135deg, #f1c40f, #f39c12);}
-    .stDownloadButton button {
-        background-color: #1b5e20;
-        color: white;
-        font-weight: bold;
-        border-radius: 10px;
-        border: none;
-        box-shadow: 0px 3px 6px rgba(0,0,0,0.2);
-    }
-    .stDownloadButton button:hover {
-        background-color: #43a047;
-        transform: scale(1.03);
-        transition: 0.2s;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# 🧠 TÍTULO
-st.title("🦺 Check List EPI - Técnicos OK e Pendentes")
-
-# 🚀 FUNÇÃO DE CARGA
 @st.cache_data
 def carregar_dados(url):
     df = pd.read_excel(url)
     df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
+
+    # Padroniza STATUS_CHECK_LIST
+    if "STATUS_CHECK_LIST" in df.columns:
+        df["STATUS_CHECK_LIST"] = (
+            df["STATUS_CHECK_LIST"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace({
+                "CHECK LIST OK": "OK",
+                "CHECKLIST OK": "OK",
+                "OK": "OK",
+                "PENDENTE": "PENDENTE"
+            })
+        )
+    else:
+        st.warning("⚠️ A coluna 'STATUS_CHECK_LIST' não existe na base. Todos os registros foram marcados como 'PENDENTE'.")
+        df["STATUS_CHECK_LIST"] = "PENDENTE"
+
+    # Cálculos
+    total = len(df)
+    if total > 0:
+        qtd_ok = (df["STATUS_CHECK_LIST"] == "OK").sum()
+        qtd_pend = (df["STATUS_CHECK_LIST"] == "PENDENTE").sum()
+        perc_ok = round((qtd_ok / total) * 100, 1)
+        perc_pend = round((qtd_pend / total) * 100, 1)
+    else:
+        qtd_ok = qtd_pend = perc_ok = perc_pend = 0
+
+    # Cards de métricas
+    col1, col2 = st.columns(2)
+    col1.metric("✅ % OK", f"{perc_ok}%", f"{qtd_ok} de {total}")
+    col2.metric("⚠️ % Pendentes", f"{perc_pend}%", f"{qtd_pend} de {total}")
+
+    # Gráfico de pizza
+    df_pizza = pd.DataFrame({
+        "Status": ["OK", "PENDENTE"],
+        "Quantidade": [qtd_ok, qtd_pend]
+    })
+
+    fig = px.pie(
+        df_pizza,
+        names="Status",
+        values="Quantidade",
+        color="Status",
+        color_discrete_map={"OK": "mediumseagreen", "PENDENTE": "tomato"},
+        title="Distribuição de Checklists"
+    )
+    fig.update_traces(textinfo="percent+label", pull=[0.05, 0])
+
+    st.plotly_chart(fig, use_container_width=True)
+
     return df
-
-# 🔗 URL
-url = "https://github.com/Patriciazambianco/MeuPainelEpi/raw/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-df = carregar_dados(url)
-
-# 🎯 FILTROS
-st.sidebar.header("🎯 Filtros")
-gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
-coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
-produtos = ["Todos"] + sorted(df["PRODUTO_SIMILAR"].dropna().unique())
-
-gerente_sel = st.sidebar.selectbox("👩‍💼 Gerente", gerentes)
-coordenador_sel = st.sidebar.selectbox("🧑‍🏭 Coordenador", coordenadores)
-produto_sel = st.sidebar.selectbox("🧰 Produto", produtos)
-
-df_filtrado = df.copy()
-if gerente_sel != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_sel]
-if coordenador_sel != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coordenador_sel]
-if produto_sel != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["PRODUTO_SIMILAR"] == produto_sel]
-
-# 📋 VISUALIZAÇÃO GERAL
-st.markdown("### 📋 Dados Filtrados")
-st.dataframe(df_filtrado)
-
-# 📦 FUNÇÃO DE DOWNLOAD
-def to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Dados")
-    output.seek(0)
-    return output
-
-st.download_button(
-    "📥 Baixar Dados Filtrados (Excel)",
-    data=to_excel(df_filtrado),
-    file_name="dados_filtrados_epi.xlsx"
-)
