@@ -7,7 +7,7 @@ from io import BytesIO
 # 🎨 CONFIGURAÇÕES GERAIS
 # ===========================================================
 st.set_page_config(page_title="Painel Check List EPI", layout="wide")
-st.title("🦺 Painel Check List EPI - Técnicos OK x Pendentes")
+st.title("🦺 Check List EPI - Técnicos OK x Pendentes")
 
 # ===========================================================
 # 🚀 FUNÇÃO DE CARGA
