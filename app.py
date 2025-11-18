@@ -3,15 +3,11 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-# ===========================================================
-# 🎨 CONFIGURAÇÕES GERAIS
-# ===========================================================
+
 st.set_page_config(page_title="Painel Check List EPI", layout="wide")
 st.title("🦺 Check List EPI - Técnicos OK x Pendentes")
 
-# ===========================================================
-# 🚀 FUNÇÃO DE CARGA
-# ===========================================================
+
 @st.cache_data
 def carregar_dados(url):
     df = pd.read_excel(url)
@@ -36,15 +32,11 @@ def carregar_dados(url):
 
     return df
 
-# ===========================================================
-# 🔗 URL DO GITHUB (LINK RAW)
-# ===========================================================
+
 url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
 df = carregar_dados(url)
 
-# ===========================================================
-# 🎯 FILTROS
-# ===========================================================
+
 st.sidebar.header("🎯 Filtros")
 gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
 coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
@@ -58,9 +50,7 @@ if gerente_sel != "Todos":
 if coord_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coord_sel]
 
-# ===========================================================
-# 📊 MÉTRICAS GERAIS
-# ===========================================================
+
 total = len(df_filtrado)
 qtd_ok = (df_filtrado["STATUS_CHECK_LIST"] == "OK").sum()
 qtd_pend = (df_filtrado["STATUS_CHECK_LIST"] == "PENDENTE").sum()
@@ -73,9 +63,7 @@ col2.metric("⚠️ Pendentes", qtd_pend)
 col3.metric("📊 % OK", f"{perc_ok}%")
 col4.metric("📉 % Pendentes", f"{perc_pend}%")
 
-# ===========================================================
-# 📈 GRÁFICO POR GERENTE
-# ===========================================================
+
 if "GERENTE" in df_filtrado.columns:
     cont_ger = df_filtrado.groupby(["GERENTE", "STATUS_CHECK_LIST"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
     for col in ["OK", "PENDENTE"]:
@@ -102,9 +90,7 @@ if "GERENTE" in df_filtrado.columns:
     fig_ger.update_layout(yaxis_title="Percentual (%)")
     st.plotly_chart(fig_ger, use_container_width=True)
 
-# ===========================================================
-# 📉 GRÁFICO POR COORDENADOR
-# ===========================================================
+
 if "COORDENADOR" in df_filtrado.columns:
     cont_coord = df_filtrado.groupby(["COORDENADOR", "STATUS_CHECK_LIST"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
     for col in ["OK", "PENDENTE"]:
@@ -131,9 +117,7 @@ if "COORDENADOR" in df_filtrado.columns:
     fig_coord.update_layout(yaxis_title="Percentual (%)")
     st.plotly_chart(fig_coord, use_container_width=True)
 
-# ===========================================================
-# 📥 BOTÃO PARA BAIXAR PENDENTES
-# ===========================================================
+
 df_pendentes = df_filtrado[df_filtrado["STATUS_CHECK_LIST"] == "PENDENTE"]
 
 st.markdown("### 📋 Técnicos Pendentes")
