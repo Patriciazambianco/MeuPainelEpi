@@ -39,9 +39,7 @@ url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LIS
 df = carregar_dados(url)
 
 
-# ========================================================
-# GRÁFICO DE PIZZA INDIVIDUAL
-# ========================================================
+
 def graf_pizza_plotly(ok, pend, titulo):
     total = ok + pend
     ok_perc = round((ok / total) * 100, 1) if total > 0 else 0
@@ -70,9 +68,7 @@ def graf_pizza_plotly(ok, pend, titulo):
     return fig
 
 
-# ========================================================
-# FILTROS
-# ========================================================
+
 st.sidebar.header("🎯 Filtros")
 gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
 coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
@@ -87,9 +83,7 @@ if coord_sel != "Todos":
     df_f = df_f[df_f["COORDENADOR"] == coord_sel]
 
 
-# ========================================================
-# MÉTRICAS
-# ========================================================
+
 total = len(df_f)
 qtd_ok = (df_f["STATUS_CHECK_LIST"] == "OK").sum()
 qtd_pend = (df_f["STATUS_CHECK_LIST"] == "PENDENTE").sum()
@@ -101,9 +95,7 @@ col3.metric("📊 % OK", f"{(qtd_ok/total*100):.1f}%" if total else "0%")
 col4.metric("📉 % Pendentes", f"{(qtd_pend/total*100):.1f}%" if total else "0%")
 
 
-# ========================================================
-# GRÁFICOS POR GERENTE
-# ========================================================
+
 st.subheader("📌 Status por Gerente")
 
 cont_g = (
@@ -132,9 +124,7 @@ else:
     st.info("Nenhum gerente encontrado.")
 
 
-# ========================================================
-# GRÁFICOS POR COORDENADOR
-# ========================================================
+
 st.subheader("📌 Status por Coordenador")
 
 cont_c = (
@@ -163,9 +153,7 @@ else:
     st.info("Nenhum coordenador encontrado.")
 
 
-# ========================================================
-# TABELA E DOWNLOAD DE PENDENTES
-# ========================================================
+
 df_pend = df_f[df_f["STATUS_CHECK_LIST"] == "PENDENTE"]
 
 st.markdown("### 📋 Técnicos Pendentes")
