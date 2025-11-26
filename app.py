@@ -6,7 +6,7 @@ from io import BytesIO
 # ---------------------------
 # Configuração da página
 # ---------------------------
-st.set_page_config(page_title="Painel Check List EPI — Power BI Dark", layout="wide")
+st.set_page_config(page_title="CHECK LIST OK x PENDENTES", layout="wide")
 
 # ===========================
 # CSS — Tudo Branco, Tudo Dark, Sem Cinza
