@@ -1,177 +1,185 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 from io import BytesIO
 
 st.set_page_config(page_title="Painel Check List EPI", layout="wide")
-st.title("🦺 Painel Check List EPI")
+st.title("🦺 Check List EPI - Técnicos OK x Pendentes")
 
-# =========================
-# CARREGAMENTO DO EXCEL
-# =========================
 
-URL = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-
+# ========================================================
+# CARREGAR DADOS
+# ========================================================
 @st.cache_data
 def carregar_dados(url):
     df = pd.read_excel(url)
-    df.columns = df.columns.astype(str).str.upper().str.strip().str.replace(" ", "_")
+    df.columns = df.columns.str.upper().str.strip().str.replace(" ", "_")
 
-    # Normalização
-    if "STATUS_CHECK_LIST" not in df.columns:
+    if "STATUS_CHECK_LIST" in df.columns:
+        df["STATUS_CHECK_LIST"] = (
+            df["STATUS_CHECK_LIST"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace({
+                "CHECK LIST OK": "OK",
+                "CHECKLIST OK": "OK",
+                "OK": "OK",
+                "PENDENTE": "PENDENTE"
+            })
+        )
+    else:
+        st.warning("⚠️ A coluna 'STATUS_CHECK_LIST' não existe na base.")
         df["STATUS_CHECK_LIST"] = "PENDENTE"
-
-    df["STATUS_CHECK_LIST"] = (
-        df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip().replace({
-            "CHECK LIST OK": "OK",
-            "CHECKLIST OK": "OK",
-            "OK": "OK",
-            "PENDENTE": "PENDENTE"
-        })
-    )
-
-    # Colunas protegidas
-    for col in ["TECNICO", "GERENTE", "COORDENADOR", "PRODUTO_SIMILAR"]:
-        if col not in df.columns:
-            df[col] = None
 
     return df
 
 
-try:
-    df = carregar_dados(URL)
-except Exception as e:
-    st.error("Erro ao carregar arquivo do GitHub.")
-    st.exception(e)
-    st.stop()
+url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
+df = carregar_dados(url)
 
 
-# =========================
-# SIDEBAR
-# =========================
-st.sidebar.header("🎯 Filtros")
-gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique().tolist())
-coords = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique().tolist())
+# ========================================================
+# GRÁFICO DE PIZZA INDIVIDUAL
+# ========================================================
+def graf_pizza_plotly(ok, pend, titulo):
+    total = ok + pend
+    ok_perc = round((ok / total) * 100, 1) if total > 0 else 0
+    pend_perc = round((pend / total) * 100, 1) if total > 0 else 0
 
-g_sel = st.sidebar.selectbox("Gerente", gerentes)
-c_sel = st.sidebar.selectbox("Coordenador", coords)
-
-df_f = df.copy()
-
-if g_sel != "Todos":
-    df_f = df_f[df_f["GERENTE"] == g_sel]
-if c_sel != "Todos":
-    df_f = df_f[df_f["COORDENADOR"] == c_sel]
-
-
-# =========================
-# MÉTRICAS
-# =========================
-total = len(df_f)
-ok = int((df_f["STATUS_CHECK_LIST"] == "OK").sum())
-pend = int((df_f["STATUS_CHECK_LIST"] == "PENDENTE").sum())
-
-p_ok = round(ok / total * 100, 1) if total else 0
-p_pend = round(pend / total * 100, 1) if total else 0
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("✔ OK", ok)
-c2.metric("⚠ Pendentes", pend)
-c3.metric("% OK", f"{p_ok}%")
-c4.metric("% Pendentes", f"{p_pend}%")
-
-
-st.markdown("---")
-
-
-# =========================
-# FUNÇÃO PLOTLY (GRÁFICOS MENORES)
-# =========================
-def graf_pizza_plotly(ok_value, pend_value, titulo):
-    fig = px.pie(
-        values=[ok_value, pend_value],
-        names=["OK", "PENDENTE"],
-        title=titulo,
-        hole=0.4,
-    )
-
-    fig.update_traces(
-        textinfo="percent+label",
-        textfont_size=12,
-        pull=[0.05, 0],
+    fig = go.Figure(
+        data=[go.Pie(
+            labels=["OK", "Pendente"],
+            values=[ok, pend],
+            hole=0.55,
+            textinfo="percent",
+            texttemplate="%{percent:.1%}",
+            marker=dict(colors=["mediumseagreen", "tomato"])
+        )]
     )
 
     fig.update_layout(
-        height=260,   # 🔥 menor
-        width=260,
+        title=titulo,
+        title_font_size=14,
+        height=250,
+        width=250,
+        showlegend=True,
         margin=dict(l=10, r=10, t=40, b=10)
     )
 
     return fig
 
 
-# =========================
-# GRÁFICOS GERAIS
-# =========================
-colA, colB, colC = st.columns(3)
+# ========================================================
+# FILTROS
+# ========================================================
+st.sidebar.header("🎯 Filtros")
+gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
+coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
 
-with colA:
-    st.plotly_chart(graf_pizza_plotly(ok, pend, "Status Geral"), use_container_width=False)
+gerente_sel = st.sidebar.selectbox("👩‍💼 Gerente", gerentes)
+coord_sel = st.sidebar.selectbox("🧑‍🏭 Coordenador", coordenadores)
 
-# GRÁFICO POR GERENTE
-cont_g = df_f.groupby(["GERENTE", "STATUS_CHECK_LIST"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
-if "OK" not in cont_g: cont_g["OK"] = 0
-if "PENDENTE" not in cont_g: cont_g["PENDENTE"] = 0
-
-if g_sel == "Todos" and not cont_g.empty:
-    g_ok = cont_g["OK"].sum()
-    g_p = cont_g["PENDENTE"].sum()
-
-    with colB:
-        st.plotly_chart(
-            graf_pizza_plotly(g_ok, g_p, "Gerentes"),
-            use_container_width=False
-        )
+df_f = df.copy()
+if gerente_sel != "Todos":
+    df_f = df_f[df_f["GERENTE"] == gerente_sel]
+if coord_sel != "Todos":
+    df_f = df_f[df_f["COORDENADOR"] == coord_sel]
 
 
-# GRÁFICO POR COORDENADOR
-cont_c = df_f.groupby(["COORDENADOR", "STATUS_CHECK_LIST"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
-if "OK" not in cont_c: cont_c["OK"] = 0
-if "PENDENTE" not in cont_c: cont_c["PENDENTE"] = 0
+# ========================================================
+# MÉTRICAS
+# ========================================================
+total = len(df_f)
+qtd_ok = (df_f["STATUS_CHECK_LIST"] == "OK").sum()
+qtd_pend = (df_f["STATUS_CHECK_LIST"] == "PENDENTE").sum()
 
-if c_sel == "Todos" and not cont_c.empty:
-    c_ok = cont_c["OK"].sum()
-    c_p = cont_c["PENDENTE"].sum()
-
-    with colC:
-        st.plotly_chart(
-            graf_pizza_plotly(c_ok, c_p, "Coordenadores"),
-            use_container_width=False
-        )
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("✅ OK", qtd_ok)
+col2.metric("⚠️ Pendentes", qtd_pend)
+col3.metric("📊 % OK", f"{(qtd_ok/total*100):.1f}%" if total else "0%")
+col4.metric("📉 % Pendentes", f"{(qtd_pend/total*100):.1f}%" if total else "0%")
 
 
-st.markdown("---")
+# ========================================================
+# GRÁFICOS POR GERENTE
+# ========================================================
+st.subheader("📌 Status por Gerente")
+
+cont_g = (
+    df_f.groupby(["GERENTE", "STATUS_CHECK_LIST"])["TECNICO"]
+    .nunique()
+    .unstack(fill_value=0)
+    .reset_index()
+)
+
+if not cont_g.empty:
+    cols = st.columns(3)
+    idx = 0
+
+    for _, row in cont_g.iterrows():
+        gerente = row["GERENTE"]
+        ok_val = int(row.get("OK", 0))
+        pend_val = int(row.get("PENDENTE", 0))
+
+        with cols[idx % 3]:
+            st.plotly_chart(
+                graf_pizza_plotly(ok_val, pend_val, f"{gerente}"),
+                use_container_width=False
+            )
+        idx += 1
+else:
+    st.info("Nenhum gerente encontrado.")
 
 
-# =========================
-# TABELA DE PENDENTES + DOWNLOAD
-# =========================
-pendentes = df_f[df_f["STATUS_CHECK_LIST"] == "PENDENTE"]
+# ========================================================
+# GRÁFICOS POR COORDENADOR
+# ========================================================
+st.subheader("📌 Status por Coordenador")
 
-st.subheader("📋 Técnicos Pendentes")
-cols_safe = ["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE", "STATUS_CHECK_LIST"]
-cols_safe = [c for c in cols_safe if c in pendentes.columns]
+cont_c = (
+    df_f.groupby(["COORDENADOR", "STATUS_CHECK_LIST"])["TECNICO"]
+    .nunique()
+    .unstack(fill_value=0)
+    .reset_index()
+)
 
-st.dataframe(pendentes[cols_safe])
+if not cont_c.empty:
+    cols = st.columns(3)
+    idx = 0
 
-if not pendentes.empty:
+    for _, row in cont_c.iterrows():
+        coord = row["COORDENADOR"]
+        ok_val = int(row.get("OK", 0))
+        pend_val = int(row.get("PENDENTE", 0))
+
+        with cols[idx % 3]:
+            st.plotly_chart(
+                graf_pizza_plotly(ok_val, pend_val, f"{coord}"),
+                use_container_width=False
+            )
+        idx += 1
+else:
+    st.info("Nenhum coordenador encontrado.")
+
+
+# ========================================================
+# TABELA E DOWNLOAD DE PENDENTES
+# ========================================================
+df_pend = df_f[df_f["STATUS_CHECK_LIST"] == "PENDENTE"]
+
+st.markdown("### 📋 Técnicos Pendentes")
+st.dataframe(df_pend[["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE", "STATUS_CHECK_LIST"]])
+
+if not df_pend.empty:
     output = BytesIO()
-    pendentes.to_excel(output, index=False, sheet_name="Pendentes")
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_pend.to_excel(writer, index=False, sheet_name="Pendentes")
     st.download_button(
-        "📥 Baixar Pendentes",
-        output.getvalue(),
-        file_name="Pendentes.xlsx",
+        label="📥 Baixar Pendentes em Excel",
+        data=output.getvalue(),
+        file_name="Pendentes_EPI.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 else:
-    st.success("Nenhum pendente. Tudo lindo 😎")
+    st.success("🎉 Nenhum pendente encontrado!")
