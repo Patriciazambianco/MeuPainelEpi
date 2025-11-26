@@ -1,4 +1,12 @@
 import streamlit as st
+st.markdown("""
+    <style>
+        .stApp {
+            background-color: #f4f4f4 !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 import pandas as pd
 import plotly.graph_objects as go
 from io import BytesIO
