@@ -55,7 +55,7 @@ div[data-testid="metric-container"] {
 }
 .metric-value {
     color: #ffffff !important;
-    font-size: 36px;
+    font-size: 36px !important;
     font-weight: 700;
 }
 
@@ -175,15 +175,23 @@ with col4:
 st.markdown("---")
 
 # ---------------------------
-# Tema plotly
+# Tema plotly atualizado
 # ---------------------------
 def aplicar_tema_plotly(fig):
     fig.update_layout(
         paper_bgcolor="#0b0b0f",
         plot_bgcolor="#0b0b0f",
         font_color="#ffffff",
-        legend=dict(bgcolor='rgba(0,0,0,0)')
+        title_font_color="#ffffff",
+        legend=dict(
+            bgcolor='rgba(0,0,0,0)',
+            font=dict(color="#ffffff")
+        )
     )
+    # Deixa textos das barras/pizza brancos
+    for trace in fig.data:
+        if 'text' in trace:
+            trace.textfont = dict(color="#ffffff")
     return fig
 
 # ---------------------------
