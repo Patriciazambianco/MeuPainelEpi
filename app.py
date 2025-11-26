@@ -1,30 +1,21 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from io import BytesIO
+import plotly.graph_objects as go
 
-# ---------------------------
-# Configuração da página
-# ---------------------------
-st.set_page_config(page_title="CHECK LIST OK x PENDENTES", layout="wide")
-
-# ===========================
-# CSS — Tudo Branco, Tudo Dark, Sem Cinza
-# ===========================
+# -------------------------------------------------
+# 🔥 CSS DARK TOTAL + TEXTO BRANCO DEFINITIVO
+# -------------------------------------------------
 st.markdown("""
 <style>
 
-.stApp {
-    background-color: #0b0b0f !important;
-}
+/* Fundo geral */
+.stApp { background-color: #0b0b0f !important; }
 
-/* Remove padding */
-.block-container {
-    padding-top: 1.5rem;
-}
+/* Container */
+.block-container { padding-top: 1.5rem !important; }
 
-/* Texto geral branco */
-html, body, [class*="css"] {
+/* Todo tipo de texto */
+html, body, p, span, div, label, li, td, th, strong, em {
     color: #ffffff !important;
 }
 
@@ -44,269 +35,136 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Cards */
 div[data-testid="metric-container"] {
-    background: rgba(255,255,255,0.04) !important;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
     border-radius: 10px !important;
-    padding: 12px !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
+    padding: 10px !important;
 }
-.metric-label {
+div[data-testid="metric-container"] * {
     color: #ffffff !important;
-    font-size: 14px;
-}
-.metric-value {
-    color: #ffffff !important;
-    font-size: 36px;
-    font-weight: 700;
 }
 
 /* Botões */
 .stButton>button {
     background-color: #13294b !important;
     color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
     border-radius: 8px !important;
 }
 
-/* DataFrame */
-.stDataFrame {
+/* Tabelas */
+.stDataFrame, .stDataFrame * {
     background-color: #0f1114 !important;
-    border-radius: 8px !important;
-    border: 1px solid rgba(255,255,255,0.08) !important;
-}
-.stDataFrame * {
     color: #ffffff !important;
 }
 
-/* Plotly */
+/* Plotly wrapper */
 .stPlotlyChart {
     background-color: transparent !important;
+    padding: 8px !important;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------
-# Título
-# ---------------------------
-st.title("🦺 CHECK LIST OK x PENDENTES")
+# -------------------------------------------------
+# 📌 Simulação dos seus dados (substituir pelo real)
+# -------------------------------------------------
+qtd_ok = 120
+qtd_pendente = 40
 
-# ---------------------------
-# Função de leitura
-# ---------------------------
-@st.cache_data
-def carregar_dados(url):
-    df = pd.read_excel(url)
-    df.columns = df.columns.astype(str).str.upper().str.strip().str.replace(" ", "_")
+df = pd.DataFrame({
+    "Gestor": ["Ana", "Ana", "Carlos", "Bruno", "Bruno"],
+    "Status": ["OK", "PENDENTE", "OK", "OK", "PENDENTE"]
+})
 
-    if "STATUS_CHECK_LIST" in df.columns:
-        df["STATUS_CHECK_LIST"] = (
-            df["STATUS_CHECK_LIST"].astype(str).str.upper().str.strip().replace({
-                "CHECK LIST OK": "OK",
-                "CHECKLIST OK": "OK",
-                "OK": "OK",
-                "PENDENTE": "PENDENTE"
-            })
-        )
-    else:
-        df["STATUS_CHECK_LIST"] = "PENDENTE"
-
-    for col in ["TECNICO", "GERENTE", "COORDENADOR", "PRODUTO_SIMILAR"]:
-        if col not in df.columns:
-            df[col] = None
-
-    return df
-
-# ---------------------------
-# Carregar dados
-# ---------------------------
-url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LISTA%20DE%20VERIFICA%C3%87%C3%83O%20EPI.xlsx"
-
-try:
-    df = carregar_dados(url)
-except Exception as e:
-    st.error("Erro ao carregar dados:")
-    st.exception(e)
-    st.stop()
-
-# ---------------------------
-# Sidebar
-# ---------------------------
-st.sidebar.header("Filtros")
-
-gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique().tolist())
-coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique().tolist())
-
-gerente_sel = st.sidebar.selectbox("Gerente", gerentes)
-coord_sel = st.sidebar.selectbox("Coordenador", coordenadores)
-
-df_f = df.copy()
-if gerente_sel != "Todos":
-    df_f = df_f[df_f["GERENTE"] == gerente_sel]
-if coord_sel != "Todos":
-    df_f = df_f[df_f["COORDENADOR"] == coord_sel]
-
-# ---------------------------
-# Métricas
-# ---------------------------
-total = len(df_f)
-qtd_ok = int((df_f["STATUS_CHECK_LIST"] == "OK").sum())
-qtd_pend = int((df_f["STATUS_CHECK_LIST"] == "PENDENTE").sum())
-
-perc_ok = round(qtd_ok / total * 100, 1) if total else 0
-perc_pend = round(qtd_pend / total * 100, 1) if total else 0
-
+# -------------------------------------------------
+# 🔍 MÉTRICAS SUPERIORES
+# -------------------------------------------------
 col1, col2, col3, col4 = st.columns(4)
 
-with col1:
-    st.markdown('<p class="metric-label">✅ OK</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="metric-value">{qtd_ok}</p>', unsafe_allow_html=True)
+col1.metric("OK", qtd_ok)
+col2.metric("PENDENTES", qtd_pendente)
 
-with col2:
-    st.markdown('<p class="metric-label">⚠️ Pendentes</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="metric-value">{qtd_pend}</p>', unsafe_allow_html=True)
+percent_ok = qtd_ok / (qtd_ok + qtd_pendente)
+percent_pen = qtd_pendente / (qtd_ok + qtd_pendente)
 
-with col3:
-    st.markdown('<p class="metric-label">📊 % OK</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="metric-value">{perc_ok:.1f}%</p>', unsafe_allow_html=True)
-
-with col4:
-    st.markdown('<p class="metric-label">📉 % Pendentes</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="metric-value">{perc_pend:.1f}%</p>', unsafe_allow_html=True)
+col3.metric("% OK", f"{percent_ok*100:.1f}%")
+col4.metric("% PENDENTE", f"{percent_pen*100:.1f}%")
 
 st.markdown("---")
 
-# ---------------------------
-# Tema plotly
-# ---------------------------
-def aplicar_tema_plotly(fig):
-    fig.update_layout(
-        paper_bgcolor="#0b0b0f",
-        plot_bgcolor="#0b0b0f",
-        font_color="#ffffff",
-        legend=dict(bgcolor='rgba(0,0,0,0)')
-    )
-    return fig
+# -------------------------------------------------
+# 🔥 GRÁFICO DE PIZZA — AGORA COM TEXTO BRANCO
+# -------------------------------------------------
+fig_pizza = go.Figure(
+    data=[
+        go.Pie(
+            labels=["OK", "PENDENTE"],
+            values=[qtd_ok, qtd_pendente],
+            hole=0.45,
+            textinfo="label+percent",
+            pull=[0, 0.05],
 
-# ---------------------------
-# Pizza geral
-# ---------------------------
-pie_df = pd.DataFrame({"Status": ["OK", "PENDENTE"], "Qtd": [qtd_ok, qtd_pend]})
-
-fig_pizza = px.pie(
-    pie_df, names="Status", values="Qtd", hole=0.45,
-    color="Status",
-    color_discrete_map={"OK": "#2b8cff", "PENDENTE": "#ff7f50"},
-    title="Distribuição Geral"
+            # 👇 AQUI ESTÁ A MÁGICA PRA FICAR BRANCO
+            textfont=dict(color="white"),
+            insidetextfont=dict(color="white"),
+            outsidetextfont=dict(color="white"),
+        )
+    ]
 )
 
-fig_pizza = aplicar_tema_plotly(fig_pizza)
+fig_pizza.update_layout(
+    showlegend=True,
+    legend=dict(font=dict(color="white")),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    height=260,
+)
+
+st.subheader("Status Geral")
 st.plotly_chart(fig_pizza, use_container_width=True)
 
-# ---------------------------
-# Por gerente
-# ---------------------------
-if "GERENTE" in df_f.columns:
+# -------------------------------------------------
+# 🔥 GRÁFICO POR GESTOR — TODOS APARECEM
+# -------------------------------------------------
+gestores = df["Gestor"].unique()
 
-    cont_g = (
-        df_f.groupby(["GERENTE", "STATUS_CHECK_LIST"])["TECNICO"]
-        .nunique()
-        .unstack(fill_value=0)
-        .reset_index()
+status_por_gestor = df.groupby(["Gestor", "Status"]).size().unstack(fill_value=0)
+
+fig_gestor = go.Figure()
+
+for gestor in gestores:
+    ok_val = status_por_gestor.loc[gestor]["OK"] if "OK" in status_por_gestor.columns else 0
+    pend_val = status_por_gestor.loc[gestor]["PENDENTE"] if "PENDENTE" in status_por_gestor.columns else 0
+    
+    fig_gestor.add_trace(
+        go.Bar(
+            name=gestor,
+            x=["OK", "PENDENTE"],
+            y=[ok_val, pend_val],
+            text=[ok_val, pend_val],
+            textposition="outside",
+            marker_line_width=0,
+            textfont=dict(color="white")
+        )
     )
 
-    for col in ["OK", "PENDENTE"]:
-        if col not in cont_g.columns:
-            cont_g[col] = 0
+fig_gestor.update_layout(
+    barmode="group",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    legend=dict(font=dict(color="white")),
+    height=350,
+    xaxis=dict(color="white"),
+    yaxis=dict(color="white")
+)
 
-    cont_g["TOTAL"] = cont_g["OK"] + cont_g["PENDENTE"]
-    cont_g["% OK"] = (cont_g["OK"] / cont_g["TOTAL"] * 100).fillna(0)
-    cont_g["% PENDENTE"] = (cont_g["PENDENTE"] / cont_g["TOTAL"] * 100).fillna(0)
+st.subheader("Status por Gestor")
+st.plotly_chart(fig_gestor, use_container_width=True)
 
-    df_bar_ger = cont_g.melt(
-        id_vars=["GERENTE"],
-        value_vars=["% OK", "% PENDENTE"],
-        var_name="STATUS",
-        value_name="PERCENTUAL"
-    )
-    df_bar_ger["STATUS"] = df_bar_ger["STATUS"].str.replace("% ", "")
-
-    fig_ger = px.bar(
-        df_bar_ger, x="GERENTE", y="PERCENTUAL",
-        color="STATUS",
-        barmode="group",
-        color_discrete_map={"OK": "#2b8cff", "PENDENTE": "#ff7f50"},
-        text=df_bar_ger["PERCENTUAL"].apply(lambda x: f"{x:.1f}%"),
-        title="% OK x % Pendentes por Gerente"
-    )
-    fig_ger = aplicar_tema_plotly(fig_ger)
-    st.plotly_chart(fig_ger, use_container_width=True)
-
-# ---------------------------
-# Por coordenador
-# ---------------------------
-if "COORDENADOR" in df_f.columns:
-
-    cont_c = (
-        df_f.groupby(["COORDENADOR", "STATUS_CHECK_LIST"])["TECNICO"]
-        .nunique()
-        .unstack(fill_value=0)
-        .reset_index()
-    )
-
-    for col in ["OK", "PENDENTE"]:
-        if col not in cont_c.columns:
-            cont_c[col] = 0
-
-    cont_c["TOTAL"] = cont_c["OK"] + cont_c["PENDENTE"]
-    cont_c["% OK"] = (cont_c["OK"] / cont_c["TOTAL"] * 100).fillna(0)
-    cont_c["% PENDENTE"] = (cont_c["PENDENTE"] / cont_c["TOTAL"] * 100).fillna(0)
-
-    df_bar_coord = cont_c.melt(
-        id_vars=["COORDENADOR"],
-        value_vars=["% OK", "% PENDENTE"],
-        var_name="STATUS",
-        value_name="PERCENTUAL"
-    )
-    df_bar_coord["STATUS"] = df_bar_coord["STATUS"].str.replace("% ", "")
-
-    fig_coord = px.bar(
-        df_bar_coord, x="COORDENADOR", y="PERCENTUAL",
-        color="STATUS",
-        barmode="group",
-        color_discrete_map={"OK": "#2b8cff", "PENDENTE": "#ff7f50"},
-        text=df_bar_coord["PERCENTUAL"].apply(lambda x: f"{x:.1f}%"),
-        title="% OK x % Pendentes por Coordenador"
-    )
-    fig_coord = aplicar_tema_plotly(fig_coord)
-    st.plotly_chart(fig_coord, use_container_width=True)
-
-st.markdown("---")
-
-# ---------------------------
-# Pendentes + Download
-# ---------------------------
-df_pend = df_f[df_f["STATUS_CHECK_LIST"] == "PENDENTE"]
-
-st.subheader("Técnicos Pendentes")
-
-cols_mostrar = [
-    c for c in ["TECNICO", "PRODUTO_SIMILAR", "COORDENADOR", "GERENTE", "STATUS_CHECK_LIST"]
-    if c in df_pend.columns
-]
-
-st.dataframe(df_pend[cols_mostrar].reset_index(drop=True))
-
-if not df_pend.empty:
-
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df_pend.to_excel(writer, index=False, sheet_name="Pendentes")
-
-    st.download_button(
-        "📥 Baixar Pendentes",
-        output.getvalue(),
-        file_name="Pendentes_EPI.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-else:
-    st.success("Nenhum pendente encontrado — tudo OK 🎉")
+# -------------------------------------------------
+# 🔥 EXIBIR TABELA
+# -------------------------------------------------
+st.subheader("Base de Dados")
+st.dataframe(df)
