@@ -87,7 +87,7 @@ div[data-testid="metric-container"] {
 # ---------------------------
 # Título
 # ---------------------------
-st.title("🦺 Check List EPI — Power BI Dark")
+st.title("🦺 Check List OK x Pendentes")
 
 # ---------------------------
 # Função de leitura
