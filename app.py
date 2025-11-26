@@ -37,6 +37,7 @@ url = "https://raw.githubusercontent.com/Patriciazambianco/MeuPainelEpi/main/LIS
 df = carregar_dados(url)
 
 
+
 st.sidebar.header("🎯 Filtros")
 gerentes = ["Todos"] + sorted(df["GERENTE"].dropna().unique())
 coordenadores = ["Todos"] + sorted(df["COORDENADOR"].dropna().unique())
@@ -49,6 +50,7 @@ if gerente_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["GERENTE"] == gerente_sel]
 if coord_sel != "Todos":
     df_filtrado = df_filtrado[df_filtrado["COORDENADOR"] == coord_sel]
+
 
 
 total = len(df_filtrado)
@@ -64,18 +66,26 @@ col3.metric("📊 % OK", f"{perc_ok}%")
 col4.metric("📉 % Pendentes", f"{perc_pend}%")
 
 
+
 if "GERENTE" in df_filtrado.columns:
     cont_ger = df_filtrado.groupby(["GERENTE", "STATUS_CHECK_LIST"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+
     for col in ["OK", "PENDENTE"]:
         if col not in cont_ger.columns:
             cont_ger[col] = 0
+
     cont_ger["TOTAL"] = cont_ger["OK"] + cont_ger["PENDENTE"]
     cont_ger["% OK"] = (cont_ger["OK"] / cont_ger["TOTAL"] * 100).where(cont_ger["TOTAL"] > 0, 0)
     cont_ger["% PENDENTE"] = (cont_ger["PENDENTE"] / cont_ger["TOTAL"] * 100).where(cont_ger["TOTAL"] > 0, 0)
-    
-    df_bar_ger = cont_ger.melt(id_vars=["GERENTE"], value_vars=["% OK", "% PENDENTE"], var_name="STATUS", value_name="PERCENTUAL")
+
+    df_bar_ger = cont_ger.melt(
+        id_vars=["GERENTE"],
+        value_vars=["% OK", "% PENDENTE"],
+        var_name="STATUS",
+        value_name="PERCENTUAL"
+    )
     df_bar_ger["STATUS"] = df_bar_ger["STATUS"].str.replace("% ", "")
-    
+
     fig_ger = px.bar(
         df_bar_ger,
         x="GERENTE",
@@ -86,21 +96,33 @@ if "GERENTE" in df_filtrado.columns:
         barmode="group",
         title="📈 % OK x % Pendentes por Gerente"
     )
+
     fig_ger.update_traces(textposition="outside")
-    fig_ger.update_layout(yaxis_title="Percentual (%)")
+    fig_ger.update_layout(
+        yaxis_title="Percentual (%)",
+        height=350      # <<< TAMANHO REDUZIDO
+    )
+
     st.plotly_chart(fig_ger, use_container_width=True)
 
 
 if "COORDENADOR" in df_filtrado.columns:
     cont_coord = df_filtrado.groupby(["COORDENADOR", "STATUS_CHECK_LIST"])["TECNICO"].nunique().unstack(fill_value=0).reset_index()
+
     for col in ["OK", "PENDENTE"]:
         if col not in cont_coord.columns:
             cont_coord[col] = 0
+
     cont_coord["TOTAL"] = cont_coord["OK"] + cont_coord["PENDENTE"]
     cont_coord["% OK"] = (cont_coord["OK"] / cont_coord["TOTAL"] * 100).where(cont_coord["TOTAL"] > 0, 0)
     cont_coord["% PENDENTE"] = (cont_coord["PENDENTE"] / cont_coord["TOTAL"] * 100).where(cont_coord["TOTAL"] > 0, 0)
 
-    df_bar_coord = cont_coord.melt(id_vars=["COORDENADOR"], value_vars=["% OK", "% PENDENTE"], var_name="STATUS", value_name="PERCENTUAL")
+    df_bar_coord = cont_coord.melt(
+        id_vars=["COORDENADOR"],
+        value_vars=["% OK", "% PENDENTE"],
+        var_name="STATUS",
+        value_name="PERCENTUAL"
+    )
     df_bar_coord["STATUS"] = df_bar_coord["STATUS"].str.replace("% ", "")
 
     fig_coord = px.bar(
@@ -113,9 +135,15 @@ if "COORDENADOR" in df_filtrado.columns:
         barmode="group",
         title="📊 % OK x % Pendentes por Coordenador"
     )
+
     fig_coord.update_traces(textposition="outside")
-    fig_coord.update_layout(yaxis_title="Percentual (%)")
+    fig_coord.update_layout(
+        yaxis_title="Percentual (%)",
+        height=350      # <<< TAMANHO REDUZIDO
+    )
+
     st.plotly_chart(fig_coord, use_container_width=True)
+
 
 
 df_pendentes = df_filtrado[df_filtrado["STATUS_CHECK_LIST"] == "PENDENTE"]
@@ -127,6 +155,7 @@ if not df_pendentes.empty:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_pendentes.to_excel(writer, index=False, sheet_name="Pendentes")
+
     st.download_button(
         label="📥 Baixar Pendentes em Excel",
         data=output.getvalue(),
